@@ -1,0 +1,39 @@
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: "0 10 1-7 * 2"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://git.keligrubb.com/actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          ACTOR_NAME="${GITHUB_ACTOR:-${ACTOR:-github-actions[bot]}}"
+          git config user.name "${ACTOR_NAME}"
+          git config user.email "${ACTOR_NAME}@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/DustinHendrickson/mod-ollama-chat.git || true
+          git fetch --no-tags origin main
+          git fetch --no-tags upstream main
+
+      - name: Rebase and push (if needed)
+        run: |
+          git switch main
+          git reset --hard origin/main
+
+          [ "$(git rev-list --count main..upstream/main)" -eq 0 ] && exit 0
+          git rebase upstream/main
+          git push --force-with-lease origin main
+

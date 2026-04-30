@@ -43,6 +43,10 @@ OllamaChat.Url = http://localhost:11434/api/generate
 #     Default:     llama3.2:1b
 OllamaChat.Model = llama3.2:1b
 
+# OllamaChat.ApiKey — optional Bearer token for OllamaChat.Url
+#     Default:     (empty)
+OllamaChat.ApiKey =
+
 # OllamaChat.NumPredict
 #     Description: Maximum number of tokens to generate in Ollama responses.
 #     0 = unlimited. Only set if you want a hard cap.

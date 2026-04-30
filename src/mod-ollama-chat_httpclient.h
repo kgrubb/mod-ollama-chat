@@ -10,7 +10,7 @@ public:
     ~OllamaHttpClient();
 
     // Make HTTP POST request to Ollama API
-    std::string Post(const std::string& url, const std::string& jsonData);
+    std::string Post(const std::string& url, const std::string& jsonData, const std::string& bearerToken = "");
     
     // Set timeout for requests (in seconds)
     void SetTimeout(int seconds);

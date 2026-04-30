@@ -19,7 +19,7 @@ OllamaHttpClient::~OllamaHttpClient()
 {
 }
 
-std::string OllamaHttpClient::Post(const std::string& url, const std::string& jsonData)
+std::string OllamaHttpClient::Post(const std::string& url, const std::string& jsonData, const std::string& bearerToken)
 {
     try 
     {
@@ -79,7 +79,9 @@ std::string OllamaHttpClient::Post(const std::string& url, const std::string& js
                 {"User-Agent", "AzerothCore-OllamaChat/1.0"},
                 {"Accept", "application/json"}
             };
-            
+            if (!bearerToken.empty())
+                headers.emplace("Authorization", "Bearer " + bearerToken);
+
             // Add ngrok bypass header if this is an ngrok URL
             if (host.find("ngrok") != std::string::npos || host.find("ngrok-free.app") != std::string::npos) {
                 headers.emplace("ngrok-skip-browser-warning", "true");
@@ -112,7 +114,9 @@ std::string OllamaHttpClient::Post(const std::string& url, const std::string& js
                 {"User-Agent", "AzerothCore-OllamaChat/1.0"},
                 {"Accept", "application/json"}
             };
-            
+            if (!bearerToken.empty())
+                headers.emplace("Authorization", "Bearer " + bearerToken);
+
             // Add ngrok bypass header if this is an ngrok URL
             if (host.find("ngrok") != std::string::npos || host.find("ngrok-free.app") != std::string::npos) {
                 headers.emplace("ngrok-skip-browser-warning", "true");

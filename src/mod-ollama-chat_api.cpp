@@ -4,12 +4,15 @@
 #include "mod-ollama-chat-utilities.h"
 #include "Log.h"
 #include <sstream>
+#include <algorithm>
 #include <nlohmann/json.hpp>
 #include <fmt/core.h>
 #include <thread>
 #include <mutex>
 #include <queue>
 #include <future>
+#include <cctype>
+#include <vector>
 
 std::string ExtractTextBetweenDoubleQuotes(const std::string& response)
 {
@@ -19,6 +22,15 @@ std::string ExtractTextBetweenDoubleQuotes(const std::string& response)
         return response.substr(first + 1, second - first - 1);
     }
     return response;
+}
+
+static bool IsOpenAIChatCompletionsUrl(std::string url)
+{
+    for (char& c : url)
+        c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
+
+    // OpenAI-compatible chat completions endpoint
+    return url.find("/v1/chat/completions") != std::string::npos || url.find("/chat/completions") != std::string::npos;
 }
 
 // Function to perform the API call.
@@ -42,6 +54,97 @@ std::string QueryOllamaAPI(const std::string& prompt)
 
     // Sanitize the prompt to ensure it's valid UTF-8 before creating JSON
     std::string sanitizedPrompt = SanitizeUTF8(prompt);
+
+    if (IsOpenAIChatCompletionsUrl(url))
+    {
+        nlohmann::json messages = nlohmann::json::array();
+        if (!g_OllamaSystemPrompt.empty())
+            messages.push_back(nlohmann::json{{"role", "system"}, {"content", SanitizeUTF8(g_OllamaSystemPrompt)}});
+        messages.push_back(nlohmann::json{{"role", "user"}, {"content", sanitizedPrompt}});
+
+        nlohmann::json requestData = {
+            {"model", model},
+            {"messages", messages},
+            {"stream", false}
+        };
+
+        if (g_OllamaNumPredict > 0)
+            requestData["max_tokens"] = g_OllamaNumPredict;
+        if (g_OllamaTemperature != 0.8f)
+            requestData["temperature"] = g_OllamaTemperature;
+        if (g_OllamaTopP != 0.95f)
+            requestData["top_p"] = g_OllamaTopP;
+
+        if (!g_OllamaStop.empty()) {
+            std::vector<std::string> stopSeqs;
+            std::stringstream ss(g_OllamaStop);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+                size_t start = item.find_first_not_of(" \t");
+                size_t end = item.find_last_not_of(" \t");
+                if (start != std::string::npos && end != std::string::npos)
+                    stopSeqs.push_back(item.substr(start, end - start + 1));
+            }
+            if (!stopSeqs.empty())
+                requestData["stop"] = stopSeqs;
+        }
+
+        std::string requestDataStr = requestData.dump();
+        std::string responseBuffer = httpClient.Post(url, requestDataStr, g_OllamaApiKey);
+
+        if (responseBuffer.empty())
+        {
+            LOG_ERROR("server.loading", "[OllamaChat] ERROR: Failed to reach LLM API at {}. Check URL configuration and network connectivity.", url);
+            if(g_DebugEnabled)
+            {
+                LOG_INFO("server.loading", "[OllamaChat] Debug: Empty response buffer from HTTP client. Model: {}", model);
+            }
+            return "";
+        }
+
+        std::string botReply;
+        try
+        {
+            nlohmann::json const root = nlohmann::json::parse(responseBuffer);
+            if (root.contains("error"))
+            {
+                LOG_ERROR("server.loading", "[OllamaChat] ERROR: OpenAI-compatible API error: {}", root["error"].dump());
+                return "";
+            }
+            if (root.contains("choices") && root["choices"].is_array() && !root["choices"].empty())
+            {
+                nlohmann::json const& choice = root["choices"][0];
+                if (choice.contains("message") && choice["message"].contains("content") && choice["message"]["content"].is_string())
+                    botReply = choice["message"]["content"].get<std::string>();
+            }
+        }
+        catch (const std::exception& e)
+        {
+            LOG_ERROR("server.loading", "[OllamaChat] ERROR: JSON parsing failed. Exception: {}", e.what());
+            if(g_DebugEnabled)
+            {
+                LOG_INFO("server.loading", "[OllamaChat] Debug: Response buffer content: {}", responseBuffer);
+            }
+            return "";
+        }
+
+        if (botReply.empty())
+        {
+            LOG_ERROR("server.loading", "[OllamaChat] ERROR: Empty response extracted from API. Model may not have generated any output.");
+            if(g_DebugEnabled)
+            {
+                LOG_INFO("server.loading", "[OllamaChat] Debug: Raw extracted response was empty.");
+            }
+            return "";
+        }
+
+        if(g_DebugEnabled)
+        {
+            LOG_INFO("server.loading", "[Ollama Chat] Parsed bot response: {}", botReply);
+        }
+
+        return botReply;
+    }
 
     nlohmann::json requestData = {
         {"model",  model},
@@ -104,9 +207,9 @@ std::string QueryOllamaAPI(const std::string& prompt)
     if (!g_OllamaStop.empty()) {
         // If comma-separated, convert to array
         std::vector<std::string> stopSeqs;
-        std::stringstream ss(g_OllamaStop);
+        std::stringstream stopStream(g_OllamaStop);
         std::string item;
-        while (std::getline(ss, item, ',')) {
+        while (std::getline(stopStream, item, ',')) {
             // trim whitespace
             size_t start = item.find_first_not_of(" \t");
             size_t end = item.find_last_not_of(" \t");
@@ -135,11 +238,11 @@ std::string QueryOllamaAPI(const std::string& prompt)
     std::string requestDataStr = requestData.dump();
 
     // Make HTTP POST request using our custom client
-    std::string responseBuffer = httpClient.Post(url, requestDataStr);
+    std::string responseBuffer = httpClient.Post(url, requestDataStr, g_OllamaApiKey);
 
     if (responseBuffer.empty())
     {
-        LOG_ERROR("server.loading", "[OllamaChat] ERROR: Failed to reach Ollama API at {}. Check URL configuration and network connectivity.", url);
+        LOG_ERROR("server.loading", "[OllamaChat] ERROR: Failed to reach LLM API at {}. Check URL configuration and network connectivity.", url);
         if(g_DebugEnabled)
         {
             LOG_INFO("server.loading", "[OllamaChat] Debug: Empty response buffer from HTTP client. Model: {}", model);
@@ -155,7 +258,7 @@ std::string QueryOllamaAPI(const std::string& prompt)
     {
         while (std::getline(ss, line))
         {
-            if (line.empty() || std::all_of(line.begin(), line.end(), isspace))
+            if (line.empty() || std::all_of(line.begin(), line.end(), [](unsigned char ch) { return std::isspace(ch); }))
                 continue;
 
             nlohmann::json jsonResponse = nlohmann::json::parse(line);
