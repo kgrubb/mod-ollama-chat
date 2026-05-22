@@ -43,6 +43,7 @@ extern uint32_t   g_EventChatterMaxBotsPerPlayer;
 // --------------------------------------------
 extern std::string g_OllamaUrl;
 extern std::string g_OllamaModel;
+extern std::string g_OllamaApiKey; // optional Bearer
 extern uint32_t    g_OllamaNumPredict;
 extern float       g_OllamaTemperature;
 extern float       g_OllamaTopP;
