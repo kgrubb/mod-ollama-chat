@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <string>
 #include <cstdint>
-#include <vector>
+#include "mod-ollama-chat_handler.h"
 
 class Player; // forward declaration
 
@@ -15,6 +15,8 @@ std::string GetBotPersonality(Player* bot);
 // Given a personality key, returns the prompt addition string from config.
 // Falls back to a default if not found.
 std::string GetPersonalityPromptAddition(const std::string& type);
+
+std::string GetPersonalityPromptForChannel(const std::string& type, ChatChannelSourceLocal channel);
 
 // Set a bot's personality manually (saves to database)
 bool SetBotPersonality(Player* bot, const std::string& personality);

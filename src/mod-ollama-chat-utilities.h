@@ -15,7 +15,7 @@ inline std::string SafeFormat(const std::string& templ, Args&&... args) {
         return fmt::vformat(templ, fmt::make_format_args(args...));
     } catch (const fmt::format_error& e) {
         LOG_ERROR("server.loading", "[Ollama Chat] Format error: {} | Template: {}", e.what(), templ);
-        return "[Format Error]";
+        return "";
     }
 }
 
@@ -116,6 +116,13 @@ inline std::string SanitizeUTF8(const std::string& str)
     }
     
     return result;
+}
+
+inline std::string ExtractJsonPayload(std::string const& text)
+{
+    size_t l = text.find('{');
+    size_t r = text.rfind('}');
+    return l != std::string::npos && r > l ? text.substr(l, r - l + 1) : text;
 }
 
 #endif // MOD_OLLAMA_CHAT_UTILS_H

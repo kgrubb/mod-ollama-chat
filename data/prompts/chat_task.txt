@@ -1,0 +1,1 @@
+Reply to the player's latest message only. Output the in-character reply with no prefix or explanation.

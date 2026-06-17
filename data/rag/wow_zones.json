@@ -68,5 +68,285 @@
     "content": "Howling Fjord is a level 68-72 zone in Northrend featuring dramatic fjords and viking-inspired settlements. Alliance players start at Valgarde while Horde players start at Camp Winterhoof. Key areas include Utgarde Keep, the Dragonflayer area, and the coastal regions. Players encounter vrykul, wolves, and various wildlife. This zone contains both questing areas and instances, making it a hub for Northrend adventurers.",
     "keywords": ["howling", "fjord", "northrend", "level 68", "valgarde", "camp winterhoof", "utgarde", "dramatic fjords", "viking inspired settlements", "alliance players", "start at", "horde players", "key areas", "utgarde keep", "dragonflayer area", "coastal regions", "encounter vrykul", "wolves", "various wildlife", "contains both", "questing areas", "instances", "making it a hub", "northrend adventurers"],
     "tags": ["zone", "northrend", "leveling", "wrath", "contested"]
+  },
+  {
+    "id": "zone_stormwind",
+    "title": "Stormwind City",
+    "content": "Stormwind is the capital of the Alliance, located in Elwynn Forest. Key districts include the Trade District, Old Town, the Dwarven District, and the Mage Quarter. Players find class trainers, the Auction House, banks, the Keep with King Varian Wrynn, and portals to major cities. Stormwind Harbor connects to Northrend via ship. The city is a hub for Alliance questing, trade, and social activity.",
+    "keywords": ["stormwind", "alliance", "capital", "varian wrynn", "trade district", "auction house", "elwynn", "harbor", "northrend", "portals"],
+    "tags": ["zone", "city", "alliance", "hub"]
+  },
+  {
+    "id": "zone_orgrimmar",
+    "title": "Orgrimmar",
+    "content": "Orgrimmar is the Horde capital in Durotar. Key areas include the Valley of Strength, Valley of Honor, Valley of Wisdom, and the Cleft of Shadow. Warchief Thrall (later Garrosh) rules from Grommash Hold. The city hosts class trainers, the Auction House, banks, and zeppelin towers to Northrend and other regions. Orgrimmar is the primary Horde hub for trade, questing, and guild activity.",
+    "keywords": ["orgrimmar", "horde", "capital", "thrall", "garrosh", "durotar", "zeppelin", "auction house", "grommash hold"],
+    "tags": ["zone", "city", "horde", "hub"]
+  },
+  {
+    "id": "zone_dalaran",
+    "title": "Dalaran",
+    "content": "Dalaran is the floating mage city in Northrend, the main hub for level 80 players. It contains portals to all major cities, the Violet Hold dungeon entrance, banks, the Kirin Tor quartermaster, and the Eventide landing for cold weather flying training. Players use Dalaran as a staging point for dungeons, raids, and daily quests across Northrend. The city was relocated from Alterac to fight the Lich King.",
+    "keywords": ["dalaran", "northrend", "mage city", "violet hold", "kirin tor", "portals", "cold weather flying", "hub", "floating city"],
+    "tags": ["zone", "city", "northrend", "wrath", "hub"]
+  },
+  {
+    "id": "zone_barrens",
+    "title": "The Barrens",
+    "content": "The Barrens is a level 10-25 contested zone in central Kalimdor. Horde players travel through Crossroads and Camp Taurajo; Alliance players enter from the south. Key areas include Ratchet (goblin port), Wailing Caverns dungeon, and the Stonetalon Mountains border. The zone features quilboar, centaurs, and raptors. It is a classic leveling route and trade corridor connecting Horde territories.",
+    "keywords": ["barrens", "crossroads", "ratchet", "wailing caverns", "kalimdor", "level 10", "contested", "quilboar", "centaur"],
+    "tags": ["zone", "kalimdor", "leveling", "contested"]
+  },
+  {
+    "id": "zone_stranglethorn_vale",
+    "title": "Stranglethorn Vale",
+    "content": "Stranglethorn Vale is a level 30-45 jungle zone in southern Eastern Kingdoms. Booty Bay is a neutral goblin port with the Booty Bay auction house. The zone contains trolls, panthers, and pirates. Zul'Gurub raid lies in the northern jungles. Players often level here for dense quest hubs and proximity to the Booty Bay-Northrend ship route in Wrath.",
+    "keywords": ["stranglethorn", "booty bay", "jungle", "zul gurub", "trolls", "level 30", "eastern kingdoms"],
+    "tags": ["zone", "eastern_kingdoms", "leveling", "jungle"]
+  },
+  {
+    "id": "zone_western_plaguelands",
+    "title": "Western Plaguelands",
+    "content": "Western Plaguelands is a level 50-58 zone corrupted by the Scourge. Key locations include Andorhal, Scholomance dungeon, and Chillwind Camp (Alliance). The Argent Dawn and Cenarion Circle have quest hubs here. Players fight undead and work toward reputation with the Argent Dawn. The zone connects to the Eastern Plaguelands and is part of the classic Scourge storyline.",
+    "keywords": ["western plaguelands", "scholomance", "andorhal", "argent dawn", "scourge", "undead", "level 50"],
+    "tags": ["zone", "eastern_kingdoms", "plaguelands", "undead", "leveling"]
+  },
+  {
+    "id": "zone_eastern_plaguelands",
+    "title": "Eastern Plaguelands",
+    "content": "Eastern Plaguelands is a level 53-60 zone dominated by the Scourge. Stratholme dungeon sits in the north. Light's Hope Chapel hosts Argent Dawn quests. Naxxramas floats above the Carrion Fields in Wrath as a level 80 raid. Players fight undead, cultists, and corrupted wildlife while advancing the war against the Lich King's forces.",
+    "keywords": ["eastern plaguelands", "stratholme", "naxxramas", "lights hope chapel", "argent dawn", "scourge", "level 53"],
+    "tags": ["zone", "eastern_kingdoms", "plaguelands", "undead", "leveling"]
+  },
+  {
+    "id": "zone_dragonblight",
+    "title": "Dragonblight",
+    "content": "Dragonblight is a level 71-74 zone in central Northrend. Wyrmrest Temple hosts the dragonflights and Obsidian Sanctum and Ruby Sanctum raids. The zone contains the Wrathgate storyline where Bolvar Fordragon falls and the Alliance and Horde briefly unite against the Scourge. Azjol-Nerub and Ahn'kahet dungeons lie beneath the zone. Naxxramas raid is located in the Carrion Fields.",
+    "keywords": ["dragonblight", "northrend", "wyrmrest temple", "wrathgate", "bolvar", "naxxramas", "azjol nerub", "level 71", "scourge"],
+    "tags": ["zone", "northrend", "wrath", "leveling", "story"]
+  },
+  {
+    "id": "zone_grizzly_hills",
+    "title": "Grizzly Hills",
+    "content": "Grizzly Hills is a level 73-75 forested zone in eastern Northrend. Alliance base Amberpine Lodge and Horde base Conquest Hold anchor faction questing. The zone features furbolgs, vrykul, and the corrupted world tree Vordrassil. Drak'Tharon Keep dungeon is in neighboring Zul'Drak but quest lines tie in here. Grizzly Hills has a frontier logging and trapper atmosphere.",
+    "keywords": ["grizzly hills", "northrend", "amberpine lodge", "conquest hold", "vordrassil", "furbolg", "vrykul", "level 73"],
+    "tags": ["zone", "northrend", "wrath", "leveling"]
+  },
+  {
+    "id": "zone_zuldrak",
+    "title": "Zul'Drak",
+    "content": "Zul'Drak is a level 74-77 zone home to the Drakkari ice trolls. The Drakkari have turned to dark loa worship and sacrifice their gods to fight the Scourge. Drak'Tharon Keep and Gundrak dungeons are located here. Key quest hubs include Zim'Torga and the Argent Stand. The zone has a grim troll empire theme with strong Scourge conflict.",
+    "keywords": ["zul drak", "northrend", "drakkari", "drak tharon", "gundrak", "ice trolls", "loa", "level 74", "argent stand"],
+    "tags": ["zone", "northrend", "wrath", "leveling", "trolls"]
+  },
+  {
+    "id": "zone_sholazar_basin",
+    "title": "Sholazar Basin",
+    "content": "Sholazar Basin is a level 76-78 tropical zone in Northrend, created by the titans as a life experiment. The Oracles (frenzyheart rivals) and the Nesingwary safari quest line define the zone. Players fight lashers, gorillas, and proto-drakes. The zone connects to Un'Goro Crater thematically and offers unique reputation factions and daily quests.",
+    "keywords": ["sholazar basin", "northrend", "oracles", "frenzyheart", "nesingwary", "titan", "level 76", "tropical"],
+    "tags": ["zone", "northrend", "wrath", "leveling"]
+  },
+  {
+    "id": "zone_crystalsong_forest",
+    "title": "Crystalsong Forest",
+    "content": "Crystalsong Forest is a level 77-80 zone between Dragonblight and Icecrown. Dalaran floats above the crystalline trees. The zone has minimal questing but serves as a transit hub to Icecrown and Storm Peaks. The forest was transformed when blue dragons attempted to contain arcane energy from the Highborne ruins of Moonsong.",
+    "keywords": ["crystalsong forest", "northrend", "dalaran", "icecrown", "storm peaks", "level 77", "crystalline"],
+    "tags": ["zone", "northrend", "wrath", "hub"]
+  },
+  {
+    "id": "zone_storm_peaks",
+    "title": "Storm Peaks",
+    "content": "Storm Peaks is a level 77-80 mountainous zone in Northrend. Ulduar raid and Halls of Stone and Halls of Lightning dungeons are located here. K3 is a goblin mining town; Thorim and the frost giants feature in quest lines. The zone reveals titan history, vrykul culture, and the corrupted watcher Loken's legacy.",
+    "keywords": ["storm peaks", "northrend", "ulduar", "halls of stone", "halls of lightning", "thorim", "k3", "titans", "level 77"],
+    "tags": ["zone", "northrend", "wrath", "leveling", "titans"]
+  },
+  {
+    "id": "zone_icecrown",
+    "title": "Icecrown",
+    "content": "Icecrown is the level 77-80 endgame zone of Northrend. Icecrown Citadel raid and the Forge of Souls, Pit of Saron, and Halls of Reflection dungeons are here. The Argent Tournament Grounds host daily quests and Trial of the Champion dungeon and Trial of the Crusader raid. The Lich King sits on the Frozen Throne atop the citadel. Players advance the final assault against the Scourge.",
+    "keywords": ["icecrown", "northrend", "icecrown citadel", "lich king", "argent tournament", "frozen throne", "forge of souls", "level 77", "scourge"],
+    "tags": ["zone", "northrend", "wrath", "endgame", "story"]
+  },
+  {
+    "id": "zone_wintergrasp",
+    "title": "Wintergrasp",
+    "content": "Wintergrasp is a level 77-80 PvP zone in southern Northrend featuring massive faction battles for control of Wintergrasp Fortress. The controlling faction gains access to the Vault of Archavon raid inside the keep. Siege vehicles, destructible walls, and periodic battles make it unique open-world PvP. Players queue from Dalaran or fly in directly.",
+    "keywords": ["wintergrasp", "northrend", "pvp", "vault of archavon", "siege", "fortress", "contested", "level 77"],
+    "tags": ["zone", "northrend", "wrath", "pvp", "raid"]
+  },
+  {
+    "id": "zone_ungoro_crater",
+    "title": "Un'Goro Crater",
+    "content": "Un'Goro Crater is a level 50-55 zone in southern Kalimdor, a titan life experiment with dinosaurs, elementals, and rich herb nodes. Marshal's Refuge is the main hub. The zone connects thematically to Sholazar Basin in Northrend. Power crystals and the Linken quest chain are memorable features.",
+    "keywords": ["un goro crater", "kalimdor", "dinosaurs", "titans", "marshals refuge", "herbs", "level 50", "power crystals"],
+    "tags": ["zone", "kalimdor", "leveling"]
+  },
+  {
+    "id": "zone_silithus",
+    "title": "Silithus",
+    "content": "Silithus is a level 55-60 desert zone and home to the silithid and qiraji threat. Cenarion Hold is the quest hub. Ruins of Ahn'Qiraj and Temple of Ahn'Qiraj raids lie in the south. Players farm elemental earth and work toward Cenarion Circle and Brood of Nozdormu reputation. The zone was the climax of Classic WoW's outdoor content.",
+    "keywords": ["silithus", "silithid", "qiraji", "ahn qiraj", "cenarion hold", "level 55", "desert"],
+    "tags": ["zone", "kalimdor", "leveling", "silithid"]
+  },
+  {
+    "id": "zone_tanaris",
+    "title": "Tanaris",
+    "content": "Tanaris is a level 40-50 desert zone with Gadgetzan as the goblin hub. Zul'Farrak dungeon and Caverns of Time (CoT) entrance lie here. In Wrath, the Culling of Stratholme dungeon is accessed via CoT. Steamwheedle Cartel quests and pirates define the zone.",
+    "keywords": ["tanaris", "gadgetzan", "zul farrak", "caverns of time", "desert", "level 40"],
+    "tags": ["zone", "kalimdor", "leveling"]
+  },
+  {
+    "id": "zone_feralas",
+    "title": "Feralas",
+    "content": "Feralas is a level 40-50 lush jungle zone with Feathermoon Stronghold (Alliance) and Camp Mojache (Horde). Dire Maul dungeon complex sits in the east. The zone features ogres, harpies, and the twin colossals. Classic high-level outdoor content.",
+    "keywords": ["feralas", "dire maul", "feathermoon", "camp mojache", "jungle", "level 40"],
+    "tags": ["zone", "kalimdor", "leveling"]
+  },
+  {
+    "id": "zone_hinterlands",
+    "title": "The Hinterlands",
+    "content": "The Hinterlands is a level 45-50 highland zone with Aerie Peak (Alliance) and Revantusk Village (Horde). Wildhammer dwarves, trolls, and the green dragonflight feature in quests. Reputation with Wildhammer or Revantusk unlocks rewards.",
+    "keywords": ["hinterlands", "aerie peak", "revantusk", "wildhammer", "trolls", "level 45"],
+    "tags": ["zone", "eastern_kingdoms", "leveling"]
+  },
+  {
+    "id": "zone_winterspring",
+    "title": "Winterspring",
+    "content": "Winterspring is a level 55-60 snowy zone in northern Kalimdor. Everlook is the neutral goblin town. Players hunt frostsabers, fight demons from the Burning Legion, and complete epic hunter quest chains. Connects to Moonglade and Felwood.",
+    "keywords": ["winterspring", "everlook", "frostsaber", "snow", "level 55", "kalimdor"],
+    "tags": ["zone", "kalimdor", "leveling"]
+  },
+  {
+    "id": "zone_felwood",
+    "title": "Felwood",
+    "content": "Felwood is a level 48-55 corrupted forest zone. Players fight satyrs, demons, and corrupted treants while aiding the Cenarion Circle. Timbermaw Hold reputation is key here. The zone bridges Ashenvale to Winterspring and Mount Hyjal.",
+    "keywords": ["felwood", "cenarion circle", "timbermaw", "corrupted", "satyr", "level 48"],
+    "tags": ["zone", "kalimdor", "leveling"]
+  },
+  {
+    "id": "zone_burning_steppes",
+    "title": "Burning Steppes",
+    "content": "Burning Steppes is a level 52-58 zone dominated by Blackrock Mountain. Morgan's Vigil (Alliance) and Flame Crest (Horde) are hubs. Lower/Upper Blackrock Spire, Blackrock Depths, and Molten Core raid entrance are here. Dark Iron dwarves and dragons populate the area.",
+    "keywords": ["burning steppes", "blackrock mountain", "molten core", "blackrock depths", "dark iron", "level 52"],
+    "tags": ["zone", "eastern_kingdoms", "leveling", "blackrock"]
+  },
+  {
+    "id": "zone_dustwallow_marsh",
+    "title": "Dustwallow Marsh",
+    "content": "Dustwallow Marsh is a level 35-45 swamp zone with Theramore Isle (Alliance) and Brackenwall Village (Horde). Onyxia's Lair raid entrance is in the Wyrmbog. The zone features dragonkin, murlocs, and the infamous 'missing diplomat' quest chain.",
+    "keywords": ["dustwallow marsh", "theramore", "onyxia", "brackenwall", "swamp", "level 35"],
+    "tags": ["zone", "kalimdor", "leveling"]
+  },
+  {
+    "id": "zone_ashenvale",
+    "title": "Ashenvale",
+    "content": "Ashenvale is a level 18-30 contested forest zone between Alliance and Horde. Astranaar and Splintertree Post are faction hubs. Warsong Gulch battleground entrance and Blackfathom Deeps dungeon border the zone. Heavy PvP and night elf vs orc conflict.",
+    "keywords": ["ashenvale", "astranaar", "splintertree", "warsong gulch", "contested", "night elf", "level 18"],
+    "tags": ["zone", "kalimdor", "leveling", "contested"]
+  },
+  {
+    "id": "zone_thousand_needles",
+    "title": "Thousand Needles",
+    "content": "Thousand Needles is a level 25-35 canyon zone in Kalimdor, flooded in later expansions but dry in Wrath. Freewind Post (Horde) and Thalanaar (Alliance) anchor questing. Centaurs, harpies, and the Shimmering Flats raceway are notable features.",
+    "keywords": ["thousand needles", "freewind post", "thalanaar", "centaur", "shimmering flats", "level 25"],
+    "tags": ["zone", "kalimdor", "leveling"]
+  },
+  {
+    "id": "zone_desolace",
+    "title": "Desolace",
+    "content": "Desolace is a level 30-40 barren zone with Nijel's Point (Alliance) and Shadowprey Village (Horde). Maraudon dungeon lies in the Valley of Spears. Centaurs, satyrs, and the neutral Magram and Gelkis centaur clans define questing.",
+    "keywords": ["desolace", "maraudon", "nijels point", "centaur", "level 30"],
+    "tags": ["zone", "kalimdor", "leveling"]
+  },
+  {
+    "id": "zone_ironforge",
+    "title": "Ironforge",
+    "content": "Ironforge is the dwarven and gnomish capital in Dun Morogh. The Great Forge, Mystic Ward, and Hall of Explorers are key districts. Alliance players access deeprun tram to Stormwind. King Magni Bronzebeard rules before his crystallization in Wrath events.",
+    "keywords": ["ironforge", "dwarf", "gnome", "alliance", "capital", "magni", "dun morogh"],
+    "tags": ["zone", "city", "alliance", "hub"]
+  },
+  {
+    "id": "zone_undercity",
+    "title": "Undercity",
+    "content": "Undercity is the Forsaken capital beneath Lordaeron ruins in Tirisfal Glades. Sylvanas Windrunner rules from the Royal Quarter. The Apothecarium, Magic Quarter, and Rogue Quarter serve undead players. Zeppelin to Northrend departs from Tirisfal towers nearby.",
+    "keywords": ["undercity", "forsaken", "sylvanas", "horde", "capital", "tirisfal", "undead"],
+    "tags": ["zone", "city", "horde", "hub"]
+  },
+  {
+    "id": "zone_darnassus",
+    "title": "Darnassus",
+    "content": "Darnassus is the night elf capital atop Teldrassil. The Temple of the Moon, Tradesmen's Terrace, and Cenarion Enclave serve Alliance druids and night elves. Tyrande Whisperwind leads the city. Port to Azuremyst Isle connects draenei allies.",
+    "keywords": ["darnassus", "night elf", "teldrassil", "tyrande", "alliance", "capital", "druid"],
+    "tags": ["zone", "city", "alliance", "hub"]
+  },
+  {
+    "id": "zone_shattrath",
+    "title": "Shattrath City",
+    "content": "Shattrath is the neutral TBC hub in Terokkar Forest, rebuilt by naaru. Aldor and Scryer factions compete for player allegiance. Portals to Outland zones and daily heroic quests make it essential for level 70 content. No auction house until later expansions.",
+    "keywords": ["shattrath", "outland", "naaru", "aldor", "scryer", "neutral", "hub", "tbc"],
+    "tags": ["zone", "city", "outland", "tbc", "hub"]
+  },
+  {
+    "id": "zone_silvermoon",
+    "title": "Silvermoon City",
+    "content": "Silvermoon City is the blood elf capital in Eversong Woods. The Sunfury Spire, Farstriders Square, and Murder Row serve Horde casters and paladins. Kael'thas's legacy and the Scourge invasion of Quel'Thalas define the city's story. Portal master connects to major cities.",
+    "keywords": ["silvermoon", "blood elf", "horde", "capital", "eversong", "quel thalas"],
+    "tags": ["zone", "city", "horde", "hub"]
+  },
+  {
+    "id": "zone_exodar",
+    "title": "The Exodar",
+    "content": "The Exodar is the draenei capital crashed on Azuremyst Isle. The Vault of Lights and Traders Tier serve Alliance draenei. Naaru technology and the Exodar's crystal architecture reflect draenei heritage. Links to Bloodmyst Isle questing.",
+    "keywords": ["exodar", "draenei", "alliance", "capital", "azuremyst", "naaru"],
+    "tags": ["zone", "city", "alliance", "hub"]
+  },
+  {
+    "id": "zone_redridge_mountains",
+    "title": "Redridge Mountains",
+    "content": "Redridge Mountains is a level 15-25 Alliance zone east of Stormwind. Lakeshire is the hub. Blackrock orc invasions and the Stonewatch keep quest line are memorable. Players defend the zone from orc raids and connect to Burning Steppes later.",
+    "keywords": ["redridge", "lakeshire", "blackrock orcs", "alliance", "level 15"],
+    "tags": ["zone", "eastern_kingdoms", "leveling", "alliance"]
+  },
+  {
+    "id": "zone_duskwood",
+    "title": "Duskwood",
+    "content": "Duskwood is a level 18-30 Alliance zone of haunted forests and undead. Darkshire is defended by the Night Watch. Mor'Ladim, Stitches, and the Defias brotherhood remnants create a gothic horror atmosphere. Connects Westfall to Stranglethorn.",
+    "keywords": ["duskwood", "darkshire", "mor ladim", "stitches", "undead", "alliance", "level 18"],
+    "tags": ["zone", "eastern_kingdoms", "leveling", "alliance"]
+  },
+  {
+    "id": "zone_westfall",
+    "title": "Westfall",
+    "content": "Westfall is a level 10-20 Alliance farming zone. Sentinel Hill opposes the Defias Brotherhood. The Deadmines dungeon tells the VanCleef story. Players investigate harvest golem attacks and economic collapse after the First War.",
+    "keywords": ["westfall", "defias", "deadmines", "sentinel hill", "vancleef", "alliance", "level 10"],
+    "tags": ["zone", "eastern_kingdoms", "leveling", "alliance"]
+  },
+  {
+    "id": "zone_loch_modan",
+    "title": "Loch Modan",
+    "content": "Loch Modan is a level 10-20 Alliance zone between Dun Morogh and Wetlands. Thelsamar is the hub. Trogg invasions, the Stonewrought Dam, and the Loch Modan yeti quest are classic experiences. The zone teaches low-level Alliance players.",
+    "keywords": ["loch modan", "thelsamar", "trogg", "dam", "alliance", "level 10"],
+    "tags": ["zone", "eastern_kingdoms", "leveling", "alliance"]
+  },
+  {
+    "id": "zone_wetlands",
+    "title": "Wetlands",
+    "content": "Wetlands is a level 20-30 Alliance swamp zone connecting Khaz Modan to Arathi. Menethil Harbor offers boat routes. Dragonmaw orcs, raptors, and the Greenwarden define questing. Notorious for confusing terrain before map addons.",
+    "keywords": ["wetlands", "menethil harbor", "dragonmaw", "alliance", "level 20", "swamp"],
+    "tags": ["zone", "eastern_kingdoms", "leveling", "alliance"]
+  },
+  {
+    "id": "zone_blasted_lands",
+    "title": "Blasted Lands",
+    "content": "Blasted Lands is a level 45-55 zone south of the Dark Portal. The portal to Outland opens here at level 58. Demons, ogres, and the Dark Portal defenders anchor endgame classic content. Nethergarde Keep (Alliance) watches the portal.",
+    "keywords": ["blasted lands", "dark portal", "outland", "nethergarde", "demons", "level 45"],
+    "tags": ["zone", "eastern_kingdoms", "leveling"]
+  },
+  {
+    "id": "zone_swamp_of_sorrows",
+    "title": "Swamp of Sorrows",
+    "content": "Swamp of Sorrows is a level 35-45 zone with Stonard (Horde) and the Sunken Temple dungeon. The zone connects to Blasted Lands and features dragons, orcs, and bog beasts. Horde players often pass through en route to the Dark Portal.",
+    "keywords": ["swamp of sorrows", "stonard", "sunken temple", "horde", "level 35"],
+    "tags": ["zone", "eastern_kingdoms", "leveling"]
   }
 ]

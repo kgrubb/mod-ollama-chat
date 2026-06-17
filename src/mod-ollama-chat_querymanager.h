@@ -6,27 +6,27 @@
 #include <mutex>
 #include <queue>
 #include <thread>
-
-std::string QueryOllamaAPI(const std::string& prompt);
+#include "mod-ollama-chat_prompt.h"
 
 class QueryManager {
 public:
     QueryManager();
     void setMaxConcurrentQueries(int maxQueries);
-    std::future<std::string> submitQuery(const std::string& prompt);
+    std::future<std::string> submitQuery(std::string const& prompt);
+    std::future<std::string> submitQuery(PromptBundle bundle);
 
 private:
     struct QueryTask {
-        std::string prompt;
+        PromptBundle bundle;
         std::promise<std::string> promise;
     };
 
-    void processQuery(const std::string& prompt, std::promise<std::string> promise);
+    void processQuery(PromptBundle bundle, std::promise<std::string> promise);
 
-    int maxConcurrentQueries; // 0 means no limit
+    int maxConcurrentQueries;
     int currentQueries;
     std::mutex mutex_;
     std::queue<QueryTask> taskQueue;
 };
 
-#endif // MOD_OLLAMA_CHAT_QUERYMANAGER_H
+#endif

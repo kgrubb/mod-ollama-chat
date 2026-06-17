@@ -58,9 +58,9 @@
   {
     "id": "raid_onyxias_lair",
     "title": "Onyxia's Lair",
-    "content": "Onyxia's Lair is a level 60 raid dungeon located beneath the Dragonmurk in Dustwallow Marsh. This volcanic cavern is home to the black dragon Onyxia. The raid consists of a single boss encounter with multiple phases. Players must coordinate to defeat the dragon through air and ground phases. This raid offers excellent loot including the Thunderfury weapon and is a classic endgame challenge.",
-    "keywords": ["onyxia", "lair", "raid", "level 60", "dustwallow", "dragon", "thunderfury", "phases", "volcanic cavern", "black dragon", "single boss", "air phase", "ground phase", "coordination", "loot", "classic", "endgame", "dragonmurk"],
-    "tags": ["raid", "endgame", "dustwallow", "dragon", "classic", "instance"]
+    "content": "Onyxia's Lair is a level 80 revamp raid in Dustwallow Marsh. Onyxia returns with updated mechanics including deep breath, adds, and phase transitions. Drops tier 9-style loot and the Onyxian Drake mount. A nostalgic one-boss raid for pugs.",
+    "keywords": ["onyxia", "lair", "raid", "level 80", "dustwallow", "dragon", "deep breath", "phase", "onyxian drake", "wrath"],
+    "tags": ["raid", "endgame", "dustwallow", "dragon", "wrath", "instance"]
   },
   {
     "id": "raid_molten_core",
@@ -79,9 +79,9 @@
   {
     "id": "raid_naxxramas",
     "title": "Naxxramas",
-    "content": "Naxxramas is a level 60 raid dungeon floating above the Eastern Plaguelands. This massive necropolis is the stronghold of Kel'Thuzad and the Scourge. The raid is divided into four wings: Arachnid, Plague, Military, and Construct. Key bosses include Anub'Rekhan, Maexxna, and Kel'Thuzad himself. This raid offers the best loot in Wrath of the Lich King and features complex encounters.",
-    "keywords": ["naxxramas", "raid", "level 60", "plaguelands", "kel thuzad", "scourge", "necroplis", "floating", "four wings", "arachnid", "plague", "military", "construct", "anub rekhan", "maexxna", "best loot", "complex", "eastern plaguelands"],
-    "tags": ["raid", "endgame", "plaguelands", "undead", "kelthuzad", "wrath", "instance"]
+    "content": "Naxxramas is a level 80 raid floating above Dragonblight in Wrath (previously level 60 in Classic). Kel'Thuzad leads the Scourge from this necropolis. Four quarters: Arachnid, Plague, Military, and Construct. Entry-level Wrath raid alongside Obsidian Sanctum, dropping tier 7 gear in 10 and 25-player modes.",
+    "keywords": ["naxxramas", "raid", "level 80", "dragonblight", "kel thuzad", "scourge", "necropolis", "four wings", "arachnid", "plague", "military", "construct", "tier 7", "wrath"],
+    "tags": ["raid", "endgame", "northrend", "undead", "kelthuzad", "wrath", "instance"]
   },
   {
     "id": "raid_ulduar",
@@ -145,5 +145,229 @@
     "content": "Temple of Ahn'Qiraj is a level 60 raid dungeon located in Silithus. This massive qiraji temple is home to C'Thun and his lieutenants. Key bosses include The Prophet Skeram, Princess Huhuran, and C'Thun himself. Players fight through temple chambers battling insectoid horrors. This raid offers the best loot in Classic WoW and features extremely complex encounters.",
     "keywords": ["temple of ahn qiraj", "raid", "level 60", "silithus", "qiraji", "c thun", "prophet skeram", "princess huhuran", "temple chambers", "insectoid", "best loot", "complex", "classic"],
     "tags": ["raid", "endgame", "silithus", "qiraji", "c_thun", "instance"]
+  },
+  {
+    "id": "dungeon_utgarde_keep",
+    "title": "Utgarde Keep",
+    "content": "Utgarde Keep is a level 70-72 dungeon in Howling Fjord, the first Northrend instance most players run. Vrykul warriors led by Prince Keleseth and Ingvar the Plunderer defend the keep. Normal mode suits leveling; heroic requires level 80 and ilvl 180. The dungeon introduces Scourge-vrykul conflict and Northrend dungeon mechanics.",
+    "keywords": ["utgarde keep", "uk", "howling fjord", "vrykul", "ingvar", "keleseth", "dungeon", "northrend", "heroic"],
+    "tags": ["dungeon", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "dungeon_utgarde_pinnacle",
+    "title": "Utgarde Pinnacle",
+    "content": "Utgarde Pinnacle is a level 80 dungeon atop Utgarde Keep in Howling Fjord. Players fight vrykul including Skadi the Ruthless and King Ymiron. Heroic mode drops emblem gear. The dungeon has a gauntlet event and is among the harder Wrath heroics.",
+    "keywords": ["utgarde pinnacle", "up", "ymiron", "skadi", "vrykul", "heroic", "howling fjord"],
+    "tags": ["dungeon", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "dungeon_the_nexus",
+    "title": "The Nexus",
+    "content": "The Nexus is a level 71-73 dungeon in Borean Tundra inside the blue dragonflight's stronghold. Commander Kolurg/Stoutbeard, Grand Magus Telestra, and Keristrasza are key bosses. The dungeon ties into Malygos and the Nexus War storyline. The Eye of Eternity raid is in the same structure.",
+    "keywords": ["nexus", "borean tundra", "malygos", "keristrasza", "telestra", "blue dragonflight", "dungeon"],
+    "tags": ["dungeon", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "dungeon_the_oculus",
+    "title": "The Oculus",
+    "content": "The Oculus is a level 80 dungeon in Borean Tundra where players ride drakes to fight Varos Cloudstrider, Mage-Lord Urom, and Ley-Guardian Eregos. The dragon vehicle mechanics make it memorable. Heroic drops include the Reins of the Blue Drake mount.",
+    "keywords": ["oculus", "borean tundra", "drake", "eregos", "vehicle", "heroic", "blue drake mount"],
+    "tags": ["dungeon", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "dungeon_azjol_nerub",
+    "title": "Azjol-Nerub",
+    "content": "Azjol-Nerub is a level 72-74 dungeon in Dragonblight featuring the nerubian spider-people. Bosses include Krik'thir the Gatewatcher, Hadronox, and Anub'arak. The dungeon explores the fallen nerubian empire and their war with the Scourge.",
+    "keywords": ["azjol nerub", "an", "nerubian", "anub arak", "dragonblight", "spider", "dungeon"],
+    "tags": ["dungeon", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "dungeon_ahnkahet",
+    "title": "Ahn'kahet: The Old Kingdom",
+    "content": "Ahn'kahet is a level 73-75 dungeon beneath Dragonblight, a twisted nerubian temple corrupted by faceless ones and the Old Gods. Elder Nadox, Jedoga Shadowseeker, and Herald Volazj are bosses. The Twilight Hammer cult appears here.",
+    "keywords": ["ahn kahet", "old kingdom", "faceless", "volazj", "twilight hammer", "nerubian", "dragonblight"],
+    "tags": ["dungeon", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "dungeon_drak_tharon",
+    "title": "Drak'Tharon Keep",
+    "content": "Drak'Tharon Keep is a level 74-76 dungeon in Zul'Drak held by the Scourge and Drakkari trolls. Trollgore, Novos the Summoner, and King Dred are bosses. The keep overlooks Gundrak and ties into Drakkari loa sacrifice storylines.",
+    "keywords": ["drak tharon", "dtk", "zul drak", "trollgore", "novos", "king dred", "drakkari"],
+    "tags": ["dungeon", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "dungeon_gundrak",
+    "title": "Gundrak",
+    "content": "Gundrak is a level 76-78 dungeon in northeastern Zul'Drak, capital of the Drakkari ice trolls. Slad'ran, Moorabi, and Gal'darah defend the temple. The trolls sacrificed their loa to empower themselves against the Scourge. Heroic Gundrak drops strong pre-raid gear.",
+    "keywords": ["gundrak", "zul drak", "drakkari", "gal darah", "slad ran", "moorabi", "loa"],
+    "tags": ["dungeon", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "dungeon_violet_hold",
+    "title": "The Violet Hold",
+    "content": "The Violet Hold is a level 75-77 dungeon in Dalaran, a prison breached by the Blue Dragonflight. Players defend against waves of random prisoners culminating in Cyanigosa or Erekem variants. It is a quick daily heroic for emblem farming.",
+    "keywords": ["violet hold", "vh", "dalaran", "cyanigosa", "waves", "blue dragonflight", "daily"],
+    "tags": ["dungeon", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "dungeon_halls_of_stone",
+    "title": "Halls of Stone",
+    "content": "Halls of Stone is a level 77-79 dungeon in Storm Peaks within Ulduar's outer halls. Tribunal of Ages, Krystallus, and Sjonnir the Ironshaper are bosses. The Brann Bronzebeard escort event explains titan history. Connects to Ulduar raid lore.",
+    "keywords": ["halls of stone", "hos", "ulduar", "storm peaks", "brann bronzebeard", "sjonnir", "titans"],
+    "tags": ["dungeon", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "dungeon_halls_of_lightning",
+    "title": "Halls of Lightning",
+    "content": "Halls of Lightning is a level 80 dungeon in Storm Peaks, prison of the corrupted titan watcher Loken. General Bjarngrim, Volkhan, and Loken himself are bosses. The dungeon reveals Loken's betrayal and connection to Yogg-Saron.",
+    "keywords": ["halls of lightning", "hol", "loken", "storm peaks", "bjarngrim", "volkhan", "titans"],
+    "tags": ["dungeon", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "dungeon_culling_stratholme",
+    "title": "The Culling of Stratholme",
+    "content": "The Culling of Stratholme is a level 80 Caverns of Time dungeon where players help Arthas purge Stratholme of the plague. Infinite Dragonflight interference and the Mal'Ganis encounter recreate iconic Warcraft III events. Heroic drops include the Bronze Drake mount.",
+    "keywords": ["culling of stratholme", "cos", "caverns of time", "arthas", "mal ganis", "infinite dragonflight", "stratholme"],
+    "tags": ["dungeon", "wrath", "instance", "story"]
+  },
+  {
+    "id": "dungeon_trial_of_champion",
+    "title": "Trial of the Champion",
+    "content": "Trial of the Champion is a level 80 dungeon at the Argent Tournament Grounds in Icecrown. Players fight faction champions and the Black Knight in arena-style encounters. It drops emblem gear and is a quick daily during the tournament event.",
+    "keywords": ["trial of the champion", "toc", "argent tournament", "black knight", "icecrown", "champions"],
+    "tags": ["dungeon", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "dungeon_forge_of_souls",
+    "title": "The Forge of Souls",
+    "content": "The Forge of Souls is the first of three Icecrown Citadel 5-man wings (FoS/PoS/HoR). Players enter the citadel's soul-grinding forge and fight Bronjahm and the Devourer of Souls. This chain leads toward the Lich King's inner sanctum.",
+    "keywords": ["forge of souls", "fos", "icecrown citadel", "bronjahm", "devourer of souls", "dungeon"],
+    "tags": ["dungeon", "northrend", "wrath", "instance", "icc"]
+  },
+  {
+    "id": "dungeon_pit_of_saron",
+    "title": "Pit of Saron",
+    "content": "Pit of Saron is the second ICC 5-man wing. Alliance and Horde forces assault the pit where slaves mine saronite. Bosses include Garfrost, Ick, and Tyrannus with Rimefang. Jaina or Sylvanas appear in the story finale.",
+    "keywords": ["pit of saron", "pos", "icecrown", "tyrannus", "saronite", "garfrost", "rimefang"],
+    "tags": ["dungeon", "northrend", "wrath", "instance", "icc"]
+  },
+  {
+    "id": "dungeon_halls_of_reflection",
+    "title": "Halls of Reflection",
+    "content": "Halls of Reflection is the final ICC 5-man wing. Players flee the Lich King through his halls with Falric, Marwyn, and an escape sequence. The Lich King himself appears at the end. Completing the chain unlocks the ICC raid entrance quest.",
+    "keywords": ["halls of reflection", "hor", "icecrown", "lich king", "falric", "marwyn", "escape"],
+    "tags": ["dungeon", "northrend", "wrath", "instance", "icc"]
+  },
+  {
+    "id": "raid_obsidian_sanctum",
+    "title": "Obsidian Sanctum",
+    "content": "Obsidian Sanctum is a level 80 raid beneath Wyrmrest Temple in Dragonblight. Sartharion is the sole boss; keeping drake mini-bosses alive increases difficulty and loot (3-drake zodiac achievements). Drops tier 7 and drake mounts. Entry-level Wrath raid alongside Naxxramas.",
+    "keywords": ["obsidian sanctum", "os", "sartharion", "wyrmrest", "dragonblight", "3 drake", "raid"],
+    "tags": ["raid", "northrend", "wrath", "instance", "dragon"]
+  },
+  {
+    "id": "raid_eye_of_eternity",
+    "title": "The Eye of Eternity",
+    "content": "The Eye of Eternity is a level 80 single-boss raid in Borean Tundra where Malygos, Aspect of the blue dragonflight, is the final boss of the Nexus War. Players fight on floating platforms with drake mounts. Drops tier 7 gear and the Reins of the Azure Drake.",
+    "keywords": ["eye of eternity", "eoe", "malygos", "nexus war", "blue dragonflight", "azure drake", "raid"],
+    "tags": ["raid", "northrend", "wrath", "instance", "dragon"]
+  },
+  {
+    "id": "raid_vault_of_archavon",
+    "title": "Vault of Archavon",
+    "content": "Vault of Archavon is a level 80 raid inside Wintergrasp Fortress, accessible only when your faction controls Wintergrasp. Archavon, Emalon, Koralon, and Toravon are weekly loot pinatas dropping tier pieces and PvE gear. Popular for casual raid groups.",
+    "keywords": ["vault of archavon", "voa", "wintergrasp", "archavon", "toravon", "emalon", "koralon", "raid"],
+    "tags": ["raid", "northrend", "wrath", "instance", "pvp"]
+  },
+  {
+    "id": "raid_trial_of_crusader",
+    "title": "Trial of the Crusader",
+    "content": "Trial of the Crusader is a level 80 raid at the Argent Tournament Grounds in Icecrown. The Northrend Beasts, Jaraxxus, Faction Champions, Twin Val'kyr, and Anub'arak form a tournament gauntlet. Heroic ToGC offers top-tier loot before Icecrown Citadel.",
+    "keywords": ["trial of the crusader", "toc", "totc", "anub arak", "jaraxxus", "valkyr", "argent tournament", "raid"],
+    "tags": ["raid", "northrend", "wrath", "instance"]
+  },
+  {
+    "id": "raid_icecrown_citadel",
+    "title": "Icecrown Citadel",
+    "content": "Icecrown Citadel is the level 80 flagship raid of Wrath where players assault the Lich King's fortress. Twelve bosses include Lord Marrowgar, Deathbringer Saurfang, Festergut and Rotface, Professor Putricide, Blood Queen Lana'thel, Sindragosa, and the Lich King. Normal and heroic 10/25 modes exist. Tier 10 gear and Shadowmourne quest chain drop here.",
+    "keywords": ["icecrown citadel", "icc", "lich king", "sindragosa", "putricide", "saurfang", "marrowgar", "blood queen", "tier 10", "shadowmourne", "raid"],
+    "tags": ["raid", "northrend", "wrath", "instance", "endgame"]
+  },
+  {
+    "id": "raid_ruby_sanctum",
+    "title": "The Ruby Sanctum",
+    "content": "The Ruby Sanctum is a level 80 raid added in patch 3.3.5 beneath Wyrmrest Temple. Halion the Twilight Destroyer leads twilight dragon invaders in a three-realm fight (physical, twilight, shadow). Serves as ICC filler content with heroic modes and tier 10 loot.",
+    "keywords": ["ruby sanctum", "rs", "halion", "twilight dragon", "wyrmrest", "3.3.5", "raid"],
+    "tags": ["raid", "northrend", "wrath", "instance", "dragon"]
+  },
+  {
+    "id": "dungeon_hellfire_ramparts",
+    "title": "Hellfire Ramparts",
+    "content": "Hellfire Ramparts is a level 60-62 Outland dungeon in Hellfire Peninsula. Watchkeeper Gargolmar, Omor the Unscarred, and Nazan/Vazruden are bosses. One of the first TBC instances players run after entering the Dark Portal.",
+    "keywords": ["hellfire ramparts", "ramparts", "hellfire peninsula", "outland", "gargolmar", "dungeon"],
+    "tags": ["dungeon", "outland", "tbc", "instance"]
+  },
+  {
+    "id": "dungeon_mana_tombs",
+    "title": "Mana-Tombs",
+    "content": "Mana-Tombs is a level 64-66 Auchindoun dungeon in Terokkar Forest. Pandemonius, Tavarok, and Nexus-Prince Shaffar are bosses. Ethereal thieves and arakkoa inhabit the tomb. Short and popular for leveling.",
+    "keywords": ["mana tombs", "auchindoun", "terokkar", "shaffar", "ethereal", "outland"],
+    "tags": ["dungeon", "outland", "tbc", "instance"]
+  },
+  {
+    "id": "raid_karazhan",
+    "title": "Karazhan",
+    "content": "Karazhan is a level 70 10-player raid in Deadwind Pass. Medivh's tower contains opera events, chess, Moroes, Curator, and Prince Malchezaar. Attunement was required in TBC. A beloved classic raid with varied encounters.",
+    "keywords": ["karazhan", "kazz", "medivh", "deadwind pass", "malchezaar", "moroes", "10 man", "raid"],
+    "tags": ["raid", "outland", "tbc", "instance"]
+  },
+  {
+    "id": "raid_black_temple",
+    "title": "Black Temple",
+    "content": "Black Temple is the level 70 capstone raid in Shadowmoon Valley. Illidan Stormrage is the final boss after a long progression through Naj'entus, Supremus, Shade of Akama, Teron Gorefiend, Gurtogg Bloodboil, Reliquary of Souls, Mother Shahraz, and the Illidari Council. Drops tier 6 gear and the Warglaives of Azzinoth.",
+    "keywords": ["black temple", "bt", "illidan", "shadowmoon", "warglaives", "tier 6", "outland", "raid"],
+    "tags": ["raid", "outland", "tbc", "instance", "endgame"]
+  },
+  {
+    "id": "raid_serpentshrine_cavern",
+    "title": "Serpentshrine Cavern",
+    "content": "Serpentshrine Cavern is a level 70 raid in Zangarmarsh under Coilfang Reservoir. Lady Vashj is the final boss after Hydross, Lurker Below, Leotheras, and Karathress. Tier 5 tokens drop here. Vashj's naga and coilfang forces defend the cavern.",
+    "keywords": ["serpentshrine", "ssc", "vashj", "coilfang", "zangarmarsh", "tier 5", "raid"],
+    "tags": ["raid", "outland", "tbc", "instance"]
+  },
+  {
+    "id": "raid_tempest_keep",
+    "title": "Tempest Keep (The Eye)",
+    "content": "Tempest Keep raid in Netherstorm features Kael'thas Sunstrider and the four advisors (Al'ar, Solarian, Void Reaver, phase 2 council). Drops tier 5 tokens and legendary weapons. Kael'thas is one of TBC's most iconic encounters.",
+    "keywords": ["tempest keep", "the eye", "kael thas", "netherstorm", "tier 5", "al ar", "raid"],
+    "tags": ["raid", "outland", "tbc", "instance"]
+  },
+  {
+    "id": "raid_gruuls_lair",
+    "title": "Gruul's Lair",
+    "content": "Gruul's Lair is a level 70 25-player raid in Blade's Edge Mountains. High King Maulgar and Gruul the Dragonkiller are the two bosses. Entry-level TBC raid dropping tier 4 tokens. Gruul's 'growth' mechanic punishes poor positioning.",
+    "keywords": ["gruul", "gruuls lair", "maulgar", "blades edge", "tier 4", "raid"],
+    "tags": ["raid", "outland", "tbc", "instance"]
+  },
+  {
+    "id": "raid_magtheridons_lair",
+    "title": "Magtheridon's Lair",
+    "content": "Magtheridon's Lair is a level 70 25-player raid in Hellfire Peninsula beneath the Citadel. Magtheridon is a single-boss encounter requiring cube teams to interrupt blast nova. Drops tier 4 tokens. Part of early TBC progression.",
+    "keywords": ["magtheridon", "hellfire", "citadel", "tier 4", "cube", "raid"],
+    "tags": ["raid", "outland", "tbc", "instance"]
+  },
+  {
+    "id": "raid_sunwell_plateau",
+    "title": "Sunwell Plateau",
+    "content": "Sunwell Plateau is the level 70 final TBC raid on Quel'Danas isle. Kil'jaeden is the final boss after Kalecgos, Brutallus, Felmyst, and the Twins (Sacrolash and Alythess). Drops tier 6 gear and the Thori'dal bow. Requires Isle of Quel'Danas unlock.",
+    "keywords": ["sunwell", "swp", "kil jaeden", "quel danas", "tier 6", "kalecgos", "raid"],
+    "tags": ["raid", "outland", "tbc", "instance", "endgame"]
+  },
+  {
+    "id": "dungeon_sethekk_halls",
+    "title": "Sethekk Halls",
+    "content": "Sethekk Halls is a level 67-70 Auchindoun dungeon in Terokkar Forest. Talon King Ikiss and Anzu (bird boss) are notable encounters. Anzu drops the Raven Lord mount. Arakkoa culture and Sethekk cult define the dungeon.",
+    "keywords": ["sethekk halls", "auchindoun", "anzu", "raven lord", "arakkoa", "terokkar"],
+    "tags": ["dungeon", "outland", "tbc", "instance"]
   }
 ]

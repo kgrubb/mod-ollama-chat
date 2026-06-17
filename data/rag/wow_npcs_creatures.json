@@ -103,5 +103,61 @@
     "content": "Various NPCs provide transportation services. Boat captains, zeppelin masters, portal trainers. Examples include the zeppelin between Orgrimmar and Undercity, or the boat from Booty Bay to Ratchet. Transportation NPCs make long-distance travel faster and more convenient. Some transportation requires tickets or has schedules.",
     "keywords": ["transportation", "boat captains", "zeppelin masters", "portals", "tickets", "schedules", "provide transportation services", "portal trainers", "examples include", "zeppelins", "orgrimmar", "undercity", "boat", "booty bay", "ratchet", "long distance travel", "faster", "more convenient", "requires tickets", "has schedules"],
     "tags": ["npcs", "transport", "travel", "convenience"]
+  },
+  {
+    "id": "npc_lich_king",
+    "title": "The Lich King (Arthas Menethil)",
+    "content": "Arthas Menethil, the Lich King, rules the Scourge from Icecrown Citadel atop the Frozen Throne. Former paladin prince of Lordaeron, he took up Frostmourne and merged with Ner'zhul. He is the primary antagonist of Wrath. Players confront him as the final boss of Icecrown Citadel.",
+    "keywords": ["lich king", "arthas", "frostmourne", "scourge", "icecrown", "frozen throne", "ner zhul", "lordaeron"],
+    "tags": ["npcs", "lore", "wrath", "boss"]
+  },
+  {
+    "id": "npc_tirion_fordring",
+    "title": "Tirion Fordring",
+    "content": "Tirion Fordring leads the Argent Crusade and Ashbringer wielder. He organizes the Argent Tournament and leads the assault on Icecrown Citadel. Known from the classic Tirion Fordring quest chain in Eastern Plaguelands. A central heroic figure in Wrath's story.",
+    "keywords": ["tirion fordring", "argent crusade", "ashbringer", "argent tournament", "icecrown", "paladin"],
+    "tags": ["npcs", "lore", "wrath", "alliance"]
+  },
+  {
+    "id": "npc_bolvar_fordragon",
+    "title": "Bolvar Fordragon",
+    "content": "Bolvar Fordragon was regent of Stormwind and hero of the Wrathgate. He was presumed dead after exposure to the Plague at the Wrathgate but became the new Lich King in the ICC finale, encased in ice to contain the Scourge.",
+    "keywords": ["bolvar fordragon", "wrathgate", "stormwind", "lich king", "plague", "icc"],
+    "tags": ["npcs", "lore", "wrath", "alliance"]
+  },
+  {
+    "id": "npc_darion_mograine",
+    "title": "Darion Mograine",
+    "content": "Darion Mograine leads the Knights of the Ebon Blade, a Death Knight faction. He wields the corrupted Ashbringer and broke free of the Lich King's control at Light's Hope Chapel. Death Knight players interact with him throughout Northrend.",
+    "keywords": ["darion mograine", "ebon blade", "death knight", "ashbringer", "mograine", "lights hope"],
+    "tags": ["npcs", "lore", "wrath", "death_knight"]
+  },
+  {
+    "id": "npc_muradin_bronzebeard",
+    "title": "Muradin Bronzebeard",
+    "content": "Muradin Bronzebeard was found in Northrend with amnesia after encountering Frostmourne with Arthas. He leads the Bronzebeard expedition at Frosthold in Storm Peaks and later appears in Icecrown. Brother of Magni and Brann.",
+    "keywords": ["muradin", "bronzebeard", "frosthold", "storm peaks", "frostmourne", "dwarf"],
+    "tags": ["npcs", "lore", "wrath", "alliance"]
+  },
+  {
+    "id": "npc_jaina_wrath",
+    "title": "Jaina Proudmoore in Northrend",
+    "content": "Jaina Proudmoore represents Alliance interests in Northrend, notably at the Wrathgate and in the Pit of Saron/Halls of Reflection dungeons. She maintains a cautious alliance with Thrall's Horde against the Scourge while protecting Theramore's interests.",
+    "keywords": ["jaina", "proudmoore", "wrathgate", "alliance", "northrend", "theramore"],
+    "tags": ["npcs", "lore", "wrath", "alliance"]
+  },
+  {
+    "id": "npc_sylvanas_wrath",
+    "title": "Sylvanas Windrunner in Northrend",
+    "content": "Sylvanas Windrunner leads Forsaken efforts in Northrend, appearing at the Wrathgate aftermath and in the ICC dungeon chain. Her apothecary's plague attack on Horde and Alliance forces at the Wrathgate reshaped faction relations.",
+    "keywords": ["sylvanas", "windrunner", "forsaken", "wrathgate", "plague", "horde", "northrend"],
+    "tags": ["npcs", "lore", "wrath", "horde"]
+  },
+  {
+    "id": "npc_highlord_tirion_icc",
+    "title": "Highlord Darion and Tirion at ICC",
+    "content": "At Icecrown Citadel, Tirion Fordring and Darion Mograine coordinate the Ashen Verdict assault. Tirion shatters Frostmourne during the Lich King fight, freeing trapped souls. The final cinematic shows Bolvar taking the crown.",
+    "keywords": ["tirion", "darion", "ashen verdict", "icc", "frostmourne", "final boss"],
+    "tags": ["npcs", "lore", "wrath", "raid"]
   }
 ]

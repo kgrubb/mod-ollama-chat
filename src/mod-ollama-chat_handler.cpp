@@ -15,6 +15,7 @@
 #include "ChannelMgr.h"
 #include <sstream>
 #include <vector>
+#include <list>
 #include <fmt/core.h>
 #include <nlohmann/json.hpp>
 #include <thread>
@@ -23,6 +24,8 @@
 #include <cctype>
 #include <chrono>
 #include <ctime>
+#include <unordered_map>
+#include <mutex>
 #include "DatabaseEnv.h"
 #include "mod-ollama-chat_handler.h"
 #include "mod-ollama-chat_api.h"
@@ -30,7 +33,10 @@
 #include "mod-ollama-chat_config.h"
 #include "mod-ollama-chat-utilities.h"
 #include "mod-ollama-chat_sentiment.h"
+#include "mod-ollama-chat_memory.h"
 #include "mod-ollama-chat_rag.h"
+#include "mod-ollama-chat_prompt.h"
+#include "mod-ollama-chat_sanitize.h"
 #include <iomanip>
 #include "SpellMgr.h"
 #include "SpellInfo.h"
@@ -52,7 +58,6 @@
 // Forward declarations for internal helper functions.
 static bool IsBotEligibleForChatChannelLocal(Player* bot, Player* player,
                                              ChatChannelSourceLocal source, Channel* channel = nullptr, Player* receiver = nullptr);
-static std::string GenerateBotPrompt(Player* bot, std::string playerMessage, Player* player);
 
 // Helper function to format class name for any player
 static std::string FormatPlayerClass(uint8_t classId)
@@ -171,6 +176,55 @@ Channel* GetValidChannel(uint32_t teamId, const std::string& channelName, Player
     return channel;
 }
 
+static void EnsureBotInZoneChannel(Player* player, char const* shortName)
+{
+    if (!player || !g_Enable)
+        return;
+
+    PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(player);
+    if (!botAI || !botAI->IsBotAI() || !player->IsInWorld())
+        return;
+
+    ChannelMgr* cMgr = ChannelMgr::forTeam(player->GetTeamId());
+    if (!cMgr)
+        return;
+
+    Channel* channel = cMgr->GetChannel(shortName, player, false);
+    if (!channel || player->IsInChannel(channel))
+        return;
+
+    channel->JoinChannel(player, "");
+}
+
+void EnsureBotInGeneralChannel(Player* player)
+{
+    EnsureBotInZoneChannel(player, "General");
+}
+
+void EnsureBotInCityChannels(Player* player)
+{
+    EnsureBotInZoneChannel(player, "General");
+    EnsureBotInZoneChannel(player, "Trade");
+    EnsureBotInZoneChannel(player, "GuildRecruitment");
+}
+
+static void EnsureBotInChannel(Player* player, Channel* channel)
+{
+    if (!player || !channel || player->IsInChannel(channel))
+        return;
+    channel->JoinChannel(player, "");
+}
+
+void PlayerBotChatHandler::OnPlayerLogin(Player* player)
+{
+    EnsureBotInCityChannels(player);
+}
+
+void PlayerBotChatHandler::OnPlayerUpdateZone(Player* player, uint32 /*newZone*/, uint32 /*newArea*/)
+{
+    EnsureBotInCityChannels(player);
+}
+
 bool PlayerBotChatHandler::OnPlayerCanUseChat(Player* player, uint32_t type, uint32_t lang, std::string& msg)
 {
     if (!g_Enable)
@@ -249,43 +303,162 @@ bool PlayerBotChatHandler::OnPlayerCanUseChat(Player* player, uint32_t type, uin
     return true;
 }
 
-void AppendBotConversation(uint64_t botGuid, uint64_t playerGuid, const std::string& playerMessage, const std::string& botReply)
+namespace
 {
-    std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-    auto& playerHistory = g_BotConversationHistory[botGuid][playerGuid];
-    playerHistory.push_back({ playerMessage, botReply });
-    while (playerHistory.size() > g_MaxConversationHistory)
+constexpr size_t kGeneralHopCap = 256;
+constexpr time_t kGeneralHopTtl = 120;
+
+struct GeneralHopEntry
+{
+    time_t expiry;
+};
+
+std::unordered_map<uint32_t, GeneralHopEntry> g_generalHopMap;
+std::mutex g_generalHopMutex;
+
+uint32_t HashGeneralMsg(std::string const& msg)
+{
+    uint32_t h = 2166136261u;
+    for (unsigned char c : msg)
     {
-        playerHistory.pop_front();
+        h ^= c;
+        h *= 16777619u;
+    }
+    return h;
+}
+
+void PruneGeneralHopLocked()
+{
+    time_t now = time(nullptr);
+    for (auto it = g_generalHopMap.begin(); it != g_generalHopMap.end();)
+    {
+        if (difftime(now, it->second.expiry) > 0)
+            it = g_generalHopMap.erase(it);
+        else
+            ++it;
+    }
+    while (g_generalHopMap.size() > kGeneralHopCap)
+        g_generalHopMap.erase(g_generalHopMap.begin());
+}
+
+void MarkBotGeneralLine(std::string const& msg)
+{
+    if (msg.empty())
+        return;
+    std::lock_guard<std::mutex> lock(g_generalHopMutex);
+    PruneGeneralHopLocked();
+    g_generalHopMap[HashGeneralMsg(msg)] = { time(nullptr) + kGeneralHopTtl };
+}
+
+bool IsBotGeneralLine(std::string const& msg)
+{
+    if (msg.empty())
+        return false;
+    std::lock_guard<std::mutex> lock(g_generalHopMutex);
+    auto it = g_generalHopMap.find(HashGeneralMsg(msg));
+    if (it == g_generalHopMap.end())
+        return false;
+    if (difftime(time(nullptr), it->second.expiry) > 0)
+        return false;
+    return true;
+}
+
+bool DeliverGeneralChat(Player* bot, std::string const& line, Channel* channel)
+{
+    if (!bot || !channel || line.empty())
+        return false;
+
+    EnsureBotInChannel(bot, channel);
+    if (!bot->IsInChannel(channel))
+        return false;
+
+    channel->Say(bot->GetGUID(), line, LANG_UNIVERSAL);
+    MarkBotGeneralLine(line);
+    ProcessBotChatMessage(bot, line, SRC_GENERAL_LOCAL, channel);
+    return true;
+}
+} // namespace
+
+bool TrySendGeneralChat(Player* bot, std::string& response, std::string const& triggerMsg, Channel* channel)
+{
+    if (!bot || !channel || response.empty())
+        return false;
+    if (!FinalizeGeneralChatLine(response, triggerMsg))
+        return false;
+    return DeliverGeneralChat(bot, response, channel);
+}
+
+void AppendBotConversation(uint64_t botGuid, uint64_t playerGuid, const std::string& playerMessage, const std::string& botReply, bool isEvent, ChatChannelSourceLocal channel, bool senderIsBot)
+{
+    if (channel == SRC_GENERAL_LOCAL && senderIsBot)
+        return;
+
+    if (g_EnableMemory)
+    {
+        AppendBotMemoryTurn(botGuid, playerGuid, playerMessage, botReply, isEvent);
+        return;
     }
 
+    {
+        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
+        auto& playerHistory = g_BotConversationHistory[botGuid][playerGuid];
+        playerHistory.push_back({ playerMessage, botReply });
+
+        while (playerHistory.size() > g_MaxConversationHistory)
+            playerHistory.pop_front();
+    }
 }
 
 void SaveBotConversationHistoryToDB()
 {
-    std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
+    if (g_EnableMemory)
+        return;
 
-    for (const auto& [botGuid, playerMap] : g_BotConversationHistory) {
-        for (const auto& [playerGuid, history] : playerMap) {
-            for (const auto& pair : history) {
-                const std::string& playerMessage = pair.first;
-                const std::string& botReply = pair.second;
+    struct HistoryRow
+    {
+        uint64_t botGuid;
+        uint64_t playerGuid;
+        std::string playerMessage;
+        std::string botReply;
+    };
 
-                std::string escPlayerMsg = playerMessage;
-                CharacterDatabase.EscapeString(escPlayerMsg);
+    std::vector<HistoryRow> rows;
+    rows.reserve(256);
 
-                std::string escBotReply = botReply;
-                CharacterDatabase.EscapeString(escBotReply);
+    {
+        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
 
-                CharacterDatabase.Execute(SafeFormat(
-                    "INSERT IGNORE INTO mod_ollama_chat_history (bot_guid, player_guid, timestamp, player_message, bot_reply) "
-                    "VALUES ({}, {}, NOW(), '{}', '{}')",
-                    botGuid, playerGuid, escPlayerMsg, escBotReply));
+        for (auto const& [botGuid, playerMap] : g_BotConversationHistory)
+        {
+            for (auto const& [playerGuid, history] : playerMap)
+            {
+                for (auto const& pair : history)
+                {
+                    rows.push_back({
+                        botGuid,
+                        playerGuid,
+                        pair.first,
+                        pair.second
+                    });
+                }
             }
         }
     }
 
-    // Cleanup: keep only the N most recent entries per bot/player pair
+    for (auto const& row : rows)
+    {
+        std::string escPlayerMsg = row.playerMessage;
+        CharacterDatabase.EscapeString(escPlayerMsg);
+
+        std::string escBotReply = row.botReply;
+        CharacterDatabase.EscapeString(escBotReply);
+
+        CharacterDatabase.Execute(SafeFormat(
+            "INSERT IGNORE INTO mod_ollama_chat_history (bot_guid, player_guid, timestamp, player_message, bot_reply) "
+            "VALUES ({}, {}, NOW(), '{}', '{}')",
+            row.botGuid, row.playerGuid, escPlayerMsg, escBotReply));
+    }
+
     std::string cleanupQuery = R"SQL(
         WITH ranked_history AS (
             SELECT
@@ -460,29 +633,47 @@ void ProcessBotChatMessage(Player* bot, const std::string& msg, ChatChannelSourc
     PlayerBotChatHandler::ProcessChat(bot, type, lang, mutableMsg, sourceLocal, channel, nullptr);
 }
 
-std::string GetBotHistoryPrompt(uint64_t botGuid, uint64_t playerGuid, std::string playerMessage)
+std::string GetBotHistoryPrompt(uint64_t botGuid, uint64_t playerGuid, std::string const& playerMessage)
 {
-    if(!g_EnableChatHistory)
-    {
+    if (!g_EnableChatHistory)
         return "";
-    }
-    
-    std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
 
-    std::string result;
-    const auto botIt = g_BotConversationHistory.find(botGuid);
-    if (botIt == g_BotConversationHistory.end())
-        return result;
-    const auto playerIt = botIt->second.find(playerGuid);
-    if (playerIt == botIt->second.end())
-        return result;
+    std::deque<std::pair<std::string, std::string>> historyCopy;
+    {
+        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
+
+        const auto botIt = g_BotConversationHistory.find(botGuid);
+        if (botIt == g_BotConversationHistory.end())
+            return "";
+        const auto playerIt = botIt->second.find(playerGuid);
+        if (playerIt == botIt->second.end())
+            return "";
+
+        size_t startIdx = 0;
+        if (g_EnableMemory)
+        {
+            uint32_t wm = 0;
+            auto cit = g_CompactedTurnCount.find(botGuid);
+            if (cit != g_CompactedTurnCount.end())
+            {
+                auto pit = cit->second.find(playerGuid);
+                if (pit != cit->second.end())
+                    wm = pit->second;
+            }
+            startIdx = std::min(static_cast<size_t>(wm), playerIt->second.size());
+        }
+        for (size_t i = startIdx; i < playerIt->second.size(); ++i)
+            historyCopy.push_back(playerIt->second[i]);
+    }
 
     Player* player = ObjectAccessor::FindPlayer(ObjectGuid(playerGuid));
     std::string playerName = player ? player->GetName() : "The player";
 
+    std::string result;
     result += SafeFormat(g_ChatHistoryHeaderTemplate, fmt::arg("player_name", playerName));
 
-    for (const auto& entry : playerIt->second) {
+    for (const auto& entry : historyCopy)
+    {
         result += SafeFormat(g_ChatHistoryLineTemplate,
             fmt::arg("player_name", playerName),
             fmt::arg("player_message", entry.first),
@@ -598,32 +789,98 @@ std::vector<std::string> ChatHandler_GetGroupStatus(Player* bot)
         }
         std::string className = FormatPlayerClass(member->getClass());
         std::string raceName = FormatPlayerRace(member->getRace());
+        std::string memberType = PlayerbotsMgr::instance().GetPlayerbotAI(member) ? "bot" : "player";
         info.push_back(
             member->GetName() +
             " (Level: " + std::to_string(member->GetLevel()) +
             ", Class: " + className +
             ", Race: " + raceName +
             ", HP: " + std::to_string(member->GetHealth()) + "/" + std::to_string(member->GetMaxHealth()) +
-            ", Dist: " + std::to_string(dist) + ")" + beingAttacked
+            ", Dist: " + std::to_string(dist) + ", " + memberType + ")" + beingAttacked
         );
 
     }
     return info;
 }
 
+GroupContext BuildGroupContext(Player* bot)
+{
+    GroupContext ctx;
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!group)
+    {
+        ctx.statusLine = "Solo";
+        return ctx;
+    }
+
+    std::ostringstream party, roster;
+    bool rosterStarted = false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->GetMap())
+            continue;
+
+        ++ctx.memberCount;
+        bool isBot = PlayerbotsMgr::instance().GetPlayerbotAI(member) != nullptr;
+        if (isBot)
+            ++ctx.botCount;
+        else
+            ++ctx.playerCount;
+
+        if (member == bot)
+            continue;
+
+        std::string line = fmt::format("{} (L{} {}, {})", member->GetName(), member->GetLevel(),
+            FormatPlayerClass(member->getClass()), isBot ? "bot" : "player");
+        party << "- " << line << "\n";
+        if (rosterStarted)
+            roster << ", ";
+        roster << line;
+        rosterStarted = true;
+    }
+
+    if (!ctx.memberCount)
+    {
+        ctx.statusLine = "Solo";
+        return ctx;
+    }
+
+    bool duo = ctx.memberCount == 2;
+    ctx.statusLine = duo
+        ? fmt::format("2-member party: only you and {}", roster.str())
+        : fmt::format("Party of {}: {}", ctx.memberCount, roster.str());
+
+    if (duo)
+        party << "Only 2 people in this party. Do not say everyone or refer to other teammates.";
+
+    ctx.partySection = party.str();
+    if (ctx.partySection.size() > 200)
+        ctx.partySection.resize(200);
+    return ctx;
+}
+
 // --- Helper: Visible players ---
-std::vector<std::string> ChatHandler_GetVisiblePlayers(Player* bot, float radius = 40.0f)
+std::vector<std::string> ChatHandler_GetVisiblePlayers(Player* bot, float radius)
 {
     std::vector<std::string> players;
-    if (!bot || !bot->GetMap()) return players;
-    for (auto const& pair : ObjectAccessor::GetPlayers())
+    if (!bot || !bot->GetMap())
+        return players;
+
+    Map* map = bot->GetMap();
+    for (auto const& ref : map->GetPlayers())
     {
-        Player* player = pair.second;
-        if (!player || player == bot) continue;
-        if (!player->IsInWorld() || player->IsGameMaster()) continue;
-        if (player->GetMap() != bot->GetMap()) continue;
-        if (!bot->IsWithinDistInMap(player, radius)) continue;
-        if (!bot->IsWithinLOS(player->GetPositionX(), player->GetPositionY(), player->GetPositionZ())) continue;
+        Player* player = ref.GetSource();
+        if (!player || player == bot)
+            continue;
+        if (!player->IsInWorld() || player->IsGameMaster())
+            continue;
+        if (!bot->IsWithinDistInMap(player, radius))
+            continue;
+        if (!bot->IsWithinLOS(player->GetPositionX(), player->GetPositionY(), player->GetPositionZ()))
+            continue;
+
         float dist = bot->GetDistance(player);
         std::string faction = (player->GetTeamId() == TEAM_ALLIANCE ? "Alliance" : "Horde");
         std::string className = FormatPlayerClass(player->getClass());
@@ -636,30 +893,49 @@ std::vector<std::string> ChatHandler_GetVisiblePlayers(Player* bot, float radius
             ", Faction: " + faction +
             ", Distance: " + std::to_string(dist) + ")"
         );
-
+        if (players.size() >= 6)
+            break;
     }
     return players;
 }
 
 // --- Helper: Visible locations/objects (creatures and gameobjects) ---
-std::vector<std::string> ChatHandler_GetVisibleLocations(Player* bot, float radius = 40.0f)
+std::vector<std::string> ChatHandler_GetVisibleLocations(Player* bot, float radius)
 {
     std::vector<std::string> visible;
-    if (!bot || !bot->GetMap()) return visible;
-    Map* map = bot->GetMap();
-    for (auto const& pair : map->GetCreatureBySpawnIdStore())
+    if (!bot || !bot->GetMap())
+        return visible;
+
+    std::list<Unit*> units;
+    Acore::AnyUnitInObjectRangeCheck unitCheck(bot, radius);
+    Acore::UnitListSearcher<Acore::AnyUnitInObjectRangeCheck> unitSearcher(bot, units, unitCheck);
+    Cell::VisitObjects(bot, unitSearcher, radius);
+
+    for (Unit* unit : units)
     {
-        Creature* c = pair.second;
-        if (!c) continue;
-        if (c->GetGUID() == bot->GetGUID()) continue;
-        if (!bot->IsWithinDistInMap(c, radius)) continue;
-        if (!bot->IsWithinLOS(c->GetPositionX(), c->GetPositionY(), c->GetPositionZ())) continue;
-        if (c->IsPet() || c->IsTotem()) continue;
+        if (visible.size() >= 6)
+            break;
+        if (!unit || unit->GetTypeId() != TYPEID_UNIT)
+            continue;
+
+        Creature* c = unit->ToCreature();
+        if (!c || c->GetGUID() == bot->GetGUID())
+            continue;
+        if (c->IsPet() || c->IsTotem())
+            continue;
+        if (!bot->IsWithinLOS(c->GetPositionX(), c->GetPositionY(), c->GetPositionZ()))
+            continue;
+
         std::string type;
-        if (c->isDead()) type = "DEAD";
-        else if (c->IsHostileTo(bot)) type = "ENEMY";
-        else if (c->IsFriendlyTo(bot)) type = "FRIENDLY";
-        else type = "NEUTRAL";
+        if (c->isDead())
+            type = "DEAD";
+        else if (c->IsHostileTo(bot))
+            type = "ENEMY";
+        else if (c->IsFriendlyTo(bot))
+            type = "FRIENDLY";
+        else
+            type = "NEUTRAL";
+
         float dist = bot->GetDistance(c);
         visible.push_back(
             type + ": " + c->GetName() +
@@ -668,12 +944,19 @@ std::vector<std::string> ChatHandler_GetVisibleLocations(Player* bot, float radi
             ", Distance: " + std::to_string(dist) + ")"
         );
     }
-    for (auto const& pair : map->GetGameObjectBySpawnIdStore())
+
+    std::list<GameObject*> gameObjects;
+    Acore::GameObjectInRangeCheck goCheck(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(), radius);
+    Acore::GameObjectListSearcher<Acore::GameObjectInRangeCheck> goSearcher(bot, gameObjects, goCheck);
+    Cell::VisitObjects(bot, goSearcher, radius);
+
+    for (GameObject* go : gameObjects)
     {
-        GameObject* go = pair.second;
-        if (!go) continue;
-        if (!bot->IsWithinDistInMap(go, radius)) continue;
-        if (!bot->IsWithinLOS(go->GetPositionX(), go->GetPositionY(), go->GetPositionZ())) continue;
+        if (visible.size() >= 8)
+            break;
+        if (!go || !bot->IsWithinLOS(go->GetPositionX(), go->GetPositionY(), go->GetPositionZ()))
+            continue;
+
         float dist = bot->GetDistance(go);
         visible.push_back(
             go->GetName() +
@@ -681,6 +964,7 @@ std::vector<std::string> ChatHandler_GetVisibleLocations(Player* bot, float radi
             ", Distance: " + std::to_string(dist) + ")"
         );
     }
+
     return visible;
 }
 
@@ -740,17 +1024,100 @@ std::string ChatHandler_GetCombatSummary(Player* bot)
     return oss.str();
 }
 
+std::string BuildBotPromptContext(Player* bot)
+{
+    if (!bot)
+        return "";
 
-static std::string GenerateBotGameStateSnapshot(Player* bot)
+    constexpr size_t kMaxBytes = 600;
+    std::ostringstream ss;
+
+    if (Map* map = bot->GetMap())
+    {
+        if (map->IsDungeon())
+            ss << "Map: dungeon " << map->GetMapName();
+        else if (map->IsRaid())
+            ss << "Map: raid " << map->GetMapName();
+        else if (map->IsBattleground())
+            ss << "Map: battleground " << map->GetMapName();
+        else
+            ss << "Map: open world " << map->GetMapName();
+    }
+
+    ss << " | In combat: " << (bot->IsInCombat() ? "yes" : "no");
+    if (bot->IsInCombat())
+    {
+        if (Unit* victim = bot->GetVictim())
+            ss << " vs " << victim->GetName();
+    }
+
+    uint32 zoneId = bot->GetZoneId();
+    std::string zoneQuest;
+    std::string fallbackQuest;
+    std::string completeQuest;
+    for (auto const& [questId, qsd] : bot->getQuestStatusMap())
+    {
+        Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
+        if (!quest)
+            continue;
+        if (qsd.Status == QUEST_STATUS_COMPLETE && completeQuest.empty())
+            completeQuest = "\"" + quest->GetTitle() + "\" ready to turn in";
+        else if (qsd.Status == QUEST_STATUS_INCOMPLETE)
+        {
+            if (zoneQuest.empty() && quest->GetZoneOrSort() == zoneId)
+                zoneQuest = "\"" + quest->GetTitle() + "\" in progress";
+            else if (fallbackQuest.empty())
+                fallbackQuest = "\"" + quest->GetTitle() + "\" in progress";
+        }
+    }
+    if (zoneQuest.empty())
+        zoneQuest = fallbackQuest;
+
+    if (!zoneQuest.empty() || !completeQuest.empty())
+    {
+        ss << "\nQuests: ";
+        if (!zoneQuest.empty())
+            ss << zoneQuest;
+        if (!zoneQuest.empty() && !completeQuest.empty())
+            ss << "; ";
+        if (!completeQuest.empty())
+            ss << completeQuest;
+    }
+
+    uint32 level = bot->GetLevel();
+    ss << "\nLevel " << level << " " << (bot->GetTeamId() == TEAM_ALLIANCE ? "Alliance" : "Horde") << ". ";
+    if (level < 20)
+        ss << "No raids, heroics, or Northrend yet. ";
+    else if (level < 58)
+        ss << "No raids, heroics, Northrend, or ICC yet. ";
+    else if (level < 70)
+        ss << "No raids or ICC yet. ";
+    else if (level < 80)
+        ss << "No ICC hardmodes yet. ";
+
+    ss << "OK to mention enemy cities or zones; don't say you're running or grouping for dungeons your faction doesn't use.";
+
+    std::string result = ss.str();
+    if (result.size() > kMaxBytes)
+        result.resize(kMaxBytes);
+    return result;
+}
+
+std::string GenerateBotGameStateSnapshot(Player* bot, bool omitGroup)
 {
     // Prepare each section
     std::string combat = ChatHandler_GetCombatSummary(bot);
 
     std::string group;
-    std::vector<std::string> groupInfo = ChatHandler_GetGroupStatus(bot);
-    if (!groupInfo.empty()) {
-        group += "Group members:\n";
-        for (const auto& entry : groupInfo) group += " - " + entry + "\n";
+    if (!omitGroup)
+    {
+        std::vector<std::string> groupInfo = ChatHandler_GetGroupStatus(bot);
+        if (!groupInfo.empty())
+        {
+            group += "Group members:\n";
+            for (const auto& entry : groupInfo)
+                group += " - " + entry + "\n";
+        }
     }
 
     std::string spells = ChatHandler_GetBotSpellInfo(bot);
@@ -811,6 +1178,111 @@ static std::string GenerateBotGameStateSnapshot(Player* bot)
         fmt::arg("los", los),
         fmt::arg("players", players)
     );
+}
+
+std::string GenerateBotPrompt(Player* bot, std::string const& playerMessage, Player* player)
+{
+    if (!bot || !player || g_ChatPromptTemplate.empty())
+        return "";
+
+    PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
+    if (!botAI || !botAI->GetChatHelper())
+        return "";
+
+    AreaTableEntry const* botCurrentArea = botAI->GetCurrentArea();
+    AreaTableEntry const* botCurrentZone = botAI->GetCurrentZone();
+    uint64_t botGuid = bot->GetGUID().GetRawValue();
+    uint64_t playerGuid = player->GetGUID().GetRawValue();
+
+    std::string personality = GetBotPersonality(bot);
+    std::string personalityPrompt = GetPersonalityPromptAddition(personality);
+    std::string botName = bot->GetName();
+    uint32_t botLevel = bot->GetLevel();
+    std::string botAreaName = botCurrentArea ? botAI->GetLocalizedAreaName(botCurrentArea) : "UnknownArea";
+    std::string botZoneName = botCurrentZone ? botAI->GetLocalizedAreaName(botCurrentZone) : "UnknownZone";
+    std::string botMapName = bot->GetMap() ? bot->GetMap()->GetMapName() : "UnknownMap";
+    std::string botClass = botAI->GetChatHelper()->FormatClass(bot->getClass());
+    std::string botRace = botAI->GetChatHelper()->FormatRace(bot->getRace());
+    std::string botRole = ChatHelper::FormatClass(bot, AiFactory::GetPlayerSpecTab(bot));
+    std::string botGender = bot->getGender() == GENDER_MALE ? "Male" : "Female";
+    std::string botFaction = bot->GetTeamId() == TEAM_ALLIANCE ? "Alliance" : "Horde";
+    std::string botGuild = bot->GetGuild() ? bot->GetGuild()->GetName() : "No Guild";
+    GroupContext groupCtx = BuildGroupContext(bot);
+    std::string botGroupStatus = groupCtx.statusLine;
+    uint32_t botGold = bot->GetMoney() / 10000;
+
+    std::string playerName = player->GetName();
+    uint32_t playerLevel = player->GetLevel();
+    std::string playerClass = botAI->GetChatHelper()->FormatClass(player->getClass());
+    std::string playerRace = botAI->GetChatHelper()->FormatRace(player->getRace());
+    std::string playerRole = ChatHelper::FormatClass(player, AiFactory::GetPlayerSpecTab(player));
+    std::string playerGender = player->getGender() == GENDER_MALE ? "Male" : "Female";
+    std::string playerFaction = player->GetTeamId() == TEAM_ALLIANCE ? "Alliance" : "Horde";
+    std::string playerGuild = player->GetGuild() ? player->GetGuild()->GetName() : "No Guild";
+    std::string playerGroupStatus = groupCtx.statusLine;
+    uint32_t playerGold = player->GetMoney() / 10000;
+    float playerDistance = player->IsInWorld() && bot->IsInWorld() ? player->GetDistance(bot) : -1.0f;
+
+    std::string chatHistory = GetBotHistoryPrompt(botGuid, playerGuid, playerMessage);
+    std::string sentimentInfo = GetSentimentPromptAddition(bot, player);
+
+    std::string ragInfo;
+    if (g_EnableRAG && g_RAGSystem)
+    {
+        auto ragResults = g_RAGSystem->RetrieveRelevantInfo(
+            playerMessage, g_RAGMaxRetrievedItems, g_RAGSimilarityThreshold);
+        std::string ragContent = g_RAGSystem->GetFormattedRAGInfo(ragResults);
+        if (!ragContent.empty() && !g_RAGPromptTemplate.empty())
+            ragInfo = SafeFormat(g_RAGPromptTemplate, fmt::arg("rag_info", ragContent));
+    }
+
+    std::string extraInfo = SafeFormat(
+        g_ChatExtraInfoTemplate,
+        fmt::arg("bot_race", botRace),
+        fmt::arg("bot_gender", botGender),
+        fmt::arg("bot_role", botRole),
+        fmt::arg("bot_faction", botFaction),
+        fmt::arg("bot_guild", botGuild),
+        fmt::arg("bot_group_status", botGroupStatus),
+        fmt::arg("bot_gold", botGold),
+        fmt::arg("player_race", playerRace),
+        fmt::arg("player_gender", playerGender),
+        fmt::arg("player_role", playerRole),
+        fmt::arg("player_faction", playerFaction),
+        fmt::arg("player_guild", playerGuild),
+        fmt::arg("player_group_status", playerGroupStatus),
+        fmt::arg("player_gold", playerGold),
+        fmt::arg("player_distance", playerDistance),
+        fmt::arg("bot_area", botAreaName),
+        fmt::arg("bot_zone", botZoneName),
+        fmt::arg("bot_map", botMapName));
+
+    std::string prompt = SafeFormat(
+        g_ChatPromptTemplate,
+        fmt::arg("bot_name", botName),
+        fmt::arg("bot_level", botLevel),
+        fmt::arg("bot_class", botClass),
+        fmt::arg("bot_personality", personalityPrompt),
+        fmt::arg("bot_personality_name", personality),
+        fmt::arg("player_level", playerLevel),
+        fmt::arg("player_class", playerClass),
+        fmt::arg("player_name", playerName),
+        fmt::arg("player_message", playerMessage),
+        fmt::arg("extra_info", extraInfo),
+        fmt::arg("chat_history", chatHistory),
+        fmt::arg("sentiment_info", sentimentInfo));
+
+    if (!ragInfo.empty())
+        prompt += ragInfo + "\n";
+
+    if (g_EnableMemory)
+    {
+        std::string memory = GetMemoryPromptAddition(botGuid, playerGuid, playerMessage, playerName);
+        if (!memory.empty())
+            prompt += memory + "\n";
+    }
+
+    return prompt;
 }
 
 
@@ -894,6 +1366,9 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
              
     PlayerbotAI* senderAI = PlayerbotsMgr::instance().GetPlayerbotAI(player);
     bool senderIsBot = (senderAI && senderAI->IsBotAI());
+
+    if (senderIsBot && sourceLocal == SRC_GENERAL_LOCAL && IsBotGeneralLine(msg))
+        return;
     
     std::vector<Player*> eligibleBots;
     
@@ -946,16 +1421,6 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                     channel->GetName(), channel->GetChannelId());
         }
         
-        // Verify the original channel is valid before proceeding
-        if (!channel)
-        {
-            if(g_DebugEnabled)
-            {
-                LOG_ERROR("server.loading", "[Ollama Chat] Channel is null, cannot process channel message");
-            }
-            return;
-        }
-        
         // For channel chat, simply find all bots in the same zone as the player
         auto const& allPlayers = ObjectAccessor::GetPlayers();
         for (auto const& itr : allPlayers)
@@ -970,8 +1435,9 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                 continue;
             
             // Check if this is a local or global channel
-            bool isLocalChannel = (channel->GetName().find("General -") != std::string::npos || 
+            bool isLocalChannel = (channel->GetName().find("General -") != std::string::npos ||
                                   channel->GetName().find("Trade -") != std::string::npos ||
+                                  channel->GetName().find("GuildRecruitment -") != std::string::npos ||
                                   channel->GetName().find("LocalDefense -") != std::string::npos);
             
             bool isGlobalChannel = (channel->GetName().find("World") != std::string::npos || channel->GetName().find("LookingForGroup") != std::string::npos);
@@ -994,6 +1460,11 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
             // CHANNEL MEMBERSHIP CHECK: Bot must actually be in the channel
             if (!candidate->IsInChannel(channel))
             {
+                if (isLocalChannel && candidate->GetZoneId() == player->GetZoneId())
+                    channel->JoinChannel(candidate, "");
+            }
+            if (!candidate->IsInChannel(channel))
+            {
                 if(g_DebugEnabled)
                 {
                     //LOG_INFO("server.loading", "[Ollama Chat] Bot {} not in channel '{}', skipping", candidate->GetName(), channel->GetName());
@@ -1012,16 +1483,6 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                     }
                     continue; // SKIP this bot - wrong faction
                 }
-            }
-            
-            // CHANNEL MEMBERSHIP CHECK: Verify bot is actually in the channel
-            if (!candidate->IsInChannel(channel))
-            {
-                if(g_DebugEnabled)
-                {
-                    //LOG_ERROR("server.loading", "[Ollama Chat] Bot {} FAILED channel membership check - Not in channel '{}'", candidate->GetName(), channel->GetName());
-                }
-                continue; // SKIP this bot - not in the channel
             }
             
             // REAL PLAYER CHECK: Channel must have at least one real player
@@ -1370,12 +1831,16 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
         return;
     }
     
-    if (finalCandidates.size() > g_MaxBotsToPick)
+    uint32_t maxPick = g_MaxBotsToPick;
+    if (senderIsBot && sourceLocal == SRC_GENERAL_LOCAL)
+        maxPick = 1;
+
+    if (finalCandidates.size() > maxPick)
     {
         std::random_device rd;
         std::mt19937 g(rd());
         std::shuffle(finalCandidates.begin(), finalCandidates.end(), g);
-        uint32_t countToPick = urand(1, g_MaxBotsToPick);
+        uint32_t countToPick = urand(1, maxPick);
         if(g_DebugEnabled)
         {
             LOG_INFO("server.loading", "[Ollama Chat] Limiting {} bots to {} (MaxBotsToPick)", finalCandidates.size(), countToPick);
@@ -1408,44 +1873,48 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
         if (bot == nullptr) {
             continue;
         }
-        std::string prompt = GenerateBotPrompt(bot, msg, player);
         uint64_t botGuid = bot->GetGUID().GetRawValue();
-        
-        std::thread([botGuid, senderGuid, prompt, sourceLocal, channelId = (channel ? channel->GetChannelId() : 0), channelName = (channel ? channel->GetName() : ""), msg]() {
+        std::string msgCopy = msg;
+
+        std::thread([botGuid, senderGuid, msgCopy, sourceLocal, channelId = (channel ? channel->GetChannelId() : 0), channelName = (channel ? channel->GetName() : "")]() {
             try {
-                // Use the QueryManager to submit the query.
-                auto responseFuture = SubmitQuery(prompt);
+                Player* botPtr = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
+                Player* senderPtr = ObjectAccessor::FindPlayer(ObjectGuid(senderGuid));
+                if (!botPtr || !senderPtr)
+                    return;
+
+                PromptBundle promptBundle = BuildPlayerChatPrompt(botPtr, senderPtr, msgCopy, sourceLocal);
+
+                if (g_DebugEnabled && g_DebugShowFullPrompt)
+                {
+                    LOG_INFO("server.loading", "[Ollama Chat] Full prompt for bot {} <- {}: system=[{}] user=[{}]",
+                        botPtr->GetName(), senderPtr->GetName(), promptBundle.system, promptBundle.user);
+                }
+
+                auto responseFuture = SubmitQuery(std::move(promptBundle));
                 if (!responseFuture.valid())
                 {
                     return;
                 }
                 std::string response = responseFuture.get();
 
-                // Reacquire pointers by GUID.
-                Player* botPtr = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
-                Player* senderPtr = ObjectAccessor::FindPlayer(ObjectGuid(senderGuid));
+                botPtr = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
+                senderPtr = ObjectAccessor::FindPlayer(ObjectGuid(senderGuid));
                 if (!botPtr)
                 {
-                    if(g_DebugEnabled)
-                    {
-                        LOG_ERROR("server.loading", "[Ollama Chat] Failed to reacquire bot from GUID {}", botGuid);
-                    }
+                    LOG_WARN("server.loading", "[Ollama Chat] Bot {} logged off before reply", botGuid);
                     return;
                 }
                 if (!senderPtr)
                 {
-                    if(g_DebugEnabled)
-                    {
-                        LOG_ERROR("server.loading", "[Ollama Chat] Failed to reacquire sender from GUID {}", senderGuid);
-                    }
+                    LOG_WARN("server.loading", "[Ollama Chat] Sender {} logged off before reply", senderGuid);
                     return;
                 }
+                PlayerbotAI* senderAI = PlayerbotsMgr::instance().GetPlayerbotAI(senderPtr);
+                bool const senderIsBot = senderAI && senderAI->IsBotAI();
                 if (response.empty())
                 {
-                    if(g_DebugEnabled)
-                    {
-                        LOG_INFO("server.loading", "[OllamaChat] Bot {} skipped reply due to API error", botPtr->GetName());
-                    }
+                    LOG_WARN("server.loading", "[Ollama Chat] {} skipped reply — empty LLM response", botPtr->GetName());
                     return;
                 }
                 PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(botPtr);
@@ -1483,48 +1952,43 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                     ChannelMgr* cMgr = ChannelMgr::forTeam(botPtr->GetTeamId());
                     if (cMgr)
                     {
-                        Channel* targetChannel = cMgr->GetChannel(channelName, botPtr);
+                        Channel* targetChannel = cMgr->GetChannel(channelName, botPtr, false);
                         if (targetChannel)
                         {
-                            if(g_DebugEnabled)
-                            {
-                                LOG_INFO("server.loading", "[Ollama Chat] Bot {} found channel '{}' (ID: {}), checking membership...", 
-                                        botPtr->GetName(), channelName, targetChannel->GetChannelId());
-                            }
-                            
+                            EnsureBotInChannel(botPtr, targetChannel);
                             if (botPtr->IsInChannel(targetChannel))
                             {
                                 if(g_DebugEnabled)
                                 {
-                                    LOG_INFO("server.loading", "[Ollama Chat] Bot {} is confirmed in channel '{}', sending message...", 
-                                            botPtr->GetName(), channelName);
+                                    LOG_INFO("server.loading", "[Ollama Chat] Bot {} sending to channel '{}' (ID: {})",
+                                            botPtr->GetName(), channelName, targetChannel->GetChannelId());
                                 }
-                                targetChannel->Say(botPtr->GetGUID(), response, LANG_UNIVERSAL);
-                                ProcessBotChatMessage(botPtr, response, SRC_GENERAL_LOCAL, targetChannel);
+                                if (sourceLocal == SRC_GENERAL_LOCAL)
+                                {
+                                    if (!TrySendGeneralChat(botPtr, response, msgCopy, targetChannel))
+                                        return;
+                                }
+                                else
+                                {
+                                    targetChannel->Say(botPtr->GetGUID(), response, LANG_UNIVERSAL);
+                                    ProcessBotChatMessage(botPtr, response, sourceLocal, targetChannel);
+                                }
                                 if(g_DebugEnabled)
                                 {
-                                    LOG_INFO("server.loading", "[Ollama Chat] Bot {} responded in channel {}: {}", 
+                                    LOG_INFO("server.loading", "[Ollama Chat] Bot {} responded in channel {}: {}",
                                             botPtr->GetName(), channelName, response);
                                 }
                             }
                             else
                             {
-                                if(g_DebugEnabled)
-                                {
-                                    LOG_ERROR("server.loading", "[Ollama Chat] Bot {} NOT in channel '{}' according to IsInChannel check - skipping reply", 
-                                                botPtr->GetName(), channelName);
-                                }
-                                // Don't fallback to Say - if bot isn't in the channel, don't reply at all
+                                LOG_WARN("server.loading", "[Ollama Chat] {} not in channel '{}' — reply skipped",
+                                    botPtr->GetName(), channelName);
                             }
                         }
                         else
                         {
-                            if(g_DebugEnabled)
-                            {
-                                LOG_ERROR("server.loading", "[Ollama Chat] Bot {} cannot find channel '{}' (ID: {}) for team {} - skipping reply", 
-                                         botPtr->GetName(), channelName, channelId, (int)botPtr->GetTeamId());
-                            }
-                            // Don't fallback to Say - if channel doesn't exist, don't reply at all
+                            LOG_WARN("server.loading", "[Ollama Chat] {} channel '{}' not found — reply skipped",
+                                botPtr->GetName(), channelName);
                         }
                     }
                 }
@@ -1640,9 +2104,9 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                 }
                 
                 // Update sentiment based on the player's message
-                UpdateBotPlayerSentiment(botPtr, senderPtr, msg);
-                
-                AppendBotConversation(botGuid, senderGuid, msg, response);
+                UpdateBotPlayerSentiment(botPtr, senderPtr, msgCopy);
+
+                AppendBotConversation(botGuid, senderGuid, msgCopy, response, false, sourceLocal, senderIsBot);
                 if (botPtr->IsInWorld() && senderPtr->IsInWorld())
                 {
                     float respDistance = senderPtr->GetDistance(botPtr);
@@ -1797,132 +2261,3 @@ static bool IsBotEligibleForChatChannelLocal(Player* bot, Player* player, ChatCh
     }
 }
 
-std::string GenerateBotPrompt(Player* bot, std::string playerMessage, Player* player)
-{  
-    if (!bot || !player) {
-        return "";
-    }
-    PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
-    if (botAI == nullptr) {
-        return "";
-    }
-    ChatHelper* helper = botAI->GetChatHelper();
-    if (helper == nullptr) {
-        return "";
-    }
-    if (g_ChatPromptTemplate.empty()) {
-        LOG_ERROR("server.loading", "[Ollama Chat] GenerateBotPrompt: template is empty");
-        return "";
-    }
-
-    AreaTableEntry const* botCurrentArea = botAI->GetCurrentArea();
-    AreaTableEntry const* botCurrentZone = botAI->GetCurrentZone();
-
-    uint64_t botGuid                = bot->GetGUID().GetRawValue();
-    uint64_t playerGuid             = player->GetGUID().GetRawValue();
-
-    std::string personality         = GetBotPersonality(bot);
-    std::string personalityPrompt   = GetPersonalityPromptAddition(personality);
-    std::string botName             = bot->GetName();
-    uint32_t botLevel               = bot->GetLevel();
-    uint8_t botGenderByte           = bot->getGender();
-    std::string botAreaName         = botCurrentArea ? botAI->GetLocalizedAreaName(botCurrentArea): "UnknownArea";
-    std::string botZoneName         = botCurrentZone ? botAI->GetLocalizedAreaName(botCurrentZone): "UnknownZone";
-    std::string botMapName          = bot->GetMap() ? bot->GetMap()->GetMapName() : "UnknownMap";
-    std::string botClass            = botAI->GetChatHelper()->FormatClass(bot->getClass());
-    std::string botRace             = botAI->GetChatHelper()->FormatRace(bot->getRace());
-    std::string botRole             = ChatHelper::FormatClass(bot, AiFactory::GetPlayerSpecTab(bot));
-    std::string botGender           = (botGenderByte == 0 ? "Male" : "Female");
-    std::string botFaction          = (bot->GetTeamId() == TEAM_ALLIANCE ? "Alliance" : "Horde");
-    std::string botGuild            = (bot->GetGuild() ? bot->GetGuild()->GetName() : "No Guild");
-    std::string botGroupStatus      = (bot->GetGroup() ? "In a group" : "Solo");
-    uint32_t botGold                = bot->GetMoney() / 10000;
-
-    std::string playerName          = player->GetName();
-    uint32_t playerLevel            = player->GetLevel();
-    std::string playerClass         = botAI->GetChatHelper()->FormatClass(player->getClass());
-    std::string playerRace          = botAI->GetChatHelper()->FormatRace(player->getRace());
-    std::string playerRole          = ChatHelper::FormatClass(player, AiFactory::GetPlayerSpecTab(player));
-    uint8_t playerGenderByte        = player->getGender();
-    std::string playerGender        = (playerGenderByte == 0 ? "Male" : "Female");
-    std::string playerFaction       = (player->GetTeamId() == TEAM_ALLIANCE ? "Alliance" : "Horde");
-    std::string playerGuild         = (player->GetGuild() ? player->GetGuild()->GetName() : "No Guild");
-    std::string playerGroupStatus   = (player->GetGroup() ? "In a group" : "Solo");
-    uint32_t playerGold             = player->GetMoney() / 10000;
-    float playerDistance            = player->IsInWorld() && bot->IsInWorld() ? player->GetDistance(bot) : -1.0f;
-
-    std::string chatHistory         = GetBotHistoryPrompt(botGuid, playerGuid, playerMessage);
-    std::string sentimentInfo       = GetSentimentPromptAddition(bot, player);
-
-    // Retrieve RAG information if enabled
-    std::string ragInfo;
-    if (g_EnableRAG && g_RAGSystem) {
-        auto ragResults = g_RAGSystem->RetrieveRelevantInfo(playerMessage, g_RAGMaxRetrievedItems, g_RAGSimilarityThreshold);
-        std::string ragContent = g_RAGSystem->GetFormattedRAGInfo(ragResults);
-        if (!ragContent.empty()) {
-            ragInfo = SafeFormat(g_RAGPromptTemplate, fmt::arg("rag_info", ragContent));
-        }
-        if (g_DebugEnabled) {
-            LOG_INFO("server.loading", "[Ollama Chat] RAG Debug - Enabled: {}, System: {}, Message: '{}', Results: {}, Content length: {}",
-                g_EnableRAG, (void*)g_RAGSystem, playerMessage, ragResults.size(), ragContent.length());
-        }
-    } else if (g_DebugEnabled) {
-        LOG_INFO("server.loading", "[Ollama Chat] RAG Debug - Not enabled or no system - Enabled: {}, System: {}",
-            g_EnableRAG, (void*)g_RAGSystem);
-    }
-
-    std::string extraInfo = SafeFormat(
-        g_ChatExtraInfoTemplate,
-        fmt::arg("bot_race", botRace),
-        fmt::arg("bot_gender", botGender),
-        fmt::arg("bot_role", botRole),
-        fmt::arg("bot_faction", botFaction),
-        fmt::arg("bot_guild", botGuild),
-        fmt::arg("bot_group_status", botGroupStatus),
-        fmt::arg("bot_gold", botGold),
-        fmt::arg("player_race", playerRace),
-        fmt::arg("player_gender", playerGender),
-        fmt::arg("player_role", playerRole),
-        fmt::arg("player_faction", playerFaction),
-        fmt::arg("player_guild", playerGuild),
-        fmt::arg("player_group_status", playerGroupStatus),
-        fmt::arg("player_gold", playerGold),
-        fmt::arg("player_distance", playerDistance),
-        fmt::arg("bot_area", botAreaName),
-        fmt::arg("bot_zone", botZoneName),
-        fmt::arg("bot_map", botMapName)
-    );
-    
-    std::string prompt = SafeFormat(
-        g_ChatPromptTemplate,
-        fmt::arg("bot_name", botName),
-        fmt::arg("bot_level", botLevel),
-        fmt::arg("bot_class", botClass),
-        fmt::arg("bot_personality", personalityPrompt),
-        fmt::arg("bot_personality_name", personality),
-        fmt::arg("player_level", playerLevel),
-        fmt::arg("player_class", playerClass),
-        fmt::arg("player_name", playerName),
-        fmt::arg("player_message", playerMessage),
-        fmt::arg("extra_info", extraInfo),
-        fmt::arg("chat_history", chatHistory),
-        fmt::arg("sentiment_info", sentimentInfo)
-    );
-
-    // Add RAG information to the prompt if available
-    if (!ragInfo.empty()) {
-        prompt += ragInfo + "\n";
-    }
-
-    if(g_EnableChatBotSnapshotTemplate)
-    {
-        prompt += GenerateBotGameStateSnapshot(bot);
-    }
-
-    // Debug logging for full prompt including RAG information
-    if (g_DebugEnabled && g_DebugShowFullPrompt) {
-        LOG_INFO("server.loading", "[Ollama Chat] Full prompt sent to bot {} for player {}: {}", botName, playerName, prompt);
-    }
-
-    return prompt;
-}

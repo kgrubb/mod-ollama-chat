@@ -6,7 +6,9 @@
 #include <vector>
 #include <deque>
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
+#include <atomic>
 #include <ctime>
 #include "ScriptMgr.h"  // Ensure WorldScript is defined
 
@@ -231,13 +233,52 @@ extern std::mutex g_SentimentMutex;
 extern time_t g_LastSentimentSaveTime;
 
 // --------------------------------------------
+// Bot-Player Long-Term Memory
+// --------------------------------------------
+enum class MemoryJobType : uint8_t
+{
+    Compact = 0,
+    Nudge = 1
+};
+
+struct MemoryJob
+{
+    MemoryJobType type;
+    uint64_t botGuid;
+    uint64_t playerGuid;
+};
+
+extern bool        g_EnableMemory;
+extern bool        g_PersistEpisodicMemory;
+extern std::string g_MemoryCompactionPrompt;
+
+extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::string>> g_SemanticMemory;
+extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, uint32_t>> g_CompactedTurnCount;
+extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::deque<time_t>>> g_TurnTimestamps;
+extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, time_t>> g_LastNudgeTime;
+extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::vector<std::pair<std::string, std::string>>>> g_ArchivePending;
+extern std::deque<MemoryJob> g_MemoryCompactionQueue;
+extern std::unordered_set<uint64_t> g_MemoryCompactionPending;
+extern std::mutex g_MemoryQueueMutex;
+extern std::atomic<uint32_t> g_MemoryCompactionInFlight;
+extern time_t g_LastMemorySaveTime;
+
+// --------------------------------------------
 // RAG (Retrieval-Augmented Generation) System
 // --------------------------------------------
 extern bool        g_EnableRAG;                          // Enable/disable RAG feature
 extern std::string g_RAGDataPath;                        // Path to RAG data files
 extern uint32_t    g_RAGMaxRetrievedItems;               // Max items to retrieve
 extern float       g_RAGSimilarityThreshold;             // Similarity threshold for retrieval
-extern std::string g_RAGPromptTemplate;                  // Template for RAG info in prompts
+extern std::string g_RAGPromptTemplate;
+
+extern std::string g_PromptDataPath;
+extern std::string g_SystemPromptOverride;
+
+extern uint32_t    g_RAGKnowledgeChance;
+extern uint32_t    g_RAGKnowledgeZoneBonus;
+extern uint32_t    g_RAGKnowledgeHomeZoneBonus;
+extern uint32_t    g_RAGKnowledgeLowLevelPenalty;
 
 class OllamaRAGSystem;
 extern OllamaRAGSystem* g_RAGSystem;                     // Global RAG system instance
@@ -283,6 +324,7 @@ extern uint32_t g_TypingSimulationDelayPerChar;   // Delay per character in mill
 // Loader Functions
 // --------------------------------------------
 void LoadOllamaChatConfig();
+void ReloadOllamaRAGSystem();
 void LoadBotPersonalityList();
 void LoadBotConversationHistoryFromDB();
 void LoadPersonalityTemplatesFromDB();
@@ -295,6 +337,7 @@ class OllamaChatConfigWorldScript : public WorldScript
 public:
     OllamaChatConfigWorldScript();
     void OnStartup() override;
+    void OnUpdate(uint32 diff) override;
     void OnShutdown() override;
 };
 

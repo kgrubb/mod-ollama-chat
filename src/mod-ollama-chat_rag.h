@@ -24,40 +24,40 @@ public:
     OllamaRAGSystem();
     ~OllamaRAGSystem();
 
-    // Initialize the RAG system by loading JSON data files
     bool Initialize();
 
-    // Retrieve relevant information based on a query
     std::vector<RAGResult> RetrieveRelevantInfo(const std::string& query, uint32_t maxResults = 3, float similarityThreshold = 0.3f);
+    std::vector<RAGResult> RetrieveRelevantInfo(const std::string& query, uint32_t maxResults, float similarityThreshold, bool factualQuery);
 
-    // Get formatted RAG information for prompt inclusion
+    void Reload();
+
     std::string GetFormattedRAGInfo(const std::vector<RAGResult>& results);
 
 private:
-    // Load RAG data from JSON files in the specified directory
+    struct EntryIndex {
+        std::unordered_map<std::string, float> termFreq;
+        float normSq = 0.0f;
+        bool factualTagBoost = false;
+        bool mechanicsTagPenalty = false;
+    };
+
     bool LoadRAGDataFromDirectory(const std::string& directoryPath);
-
-    // Load a single JSON file
     bool LoadRAGDataFromFile(const std::string& filePath);
+    void BuildEntryIndex();
 
-    // Calculate similarity between query and entry
-    float CalculateSimilarity(const std::string& query, const RAGEntry& entry);
+    float CalculateSimilarity(
+        std::unordered_map<std::string, float> const& queryTf,
+        float queryNormSq,
+        size_t entryIndex,
+        bool factualQuery) const;
 
-    // Simple text preprocessing (lowercase, remove punctuation)
     std::string PreprocessText(const std::string& text) const;
-
-    // Split text into words
     std::vector<std::string> TokenizeText(const std::string& text) const;
-
-    // Calculate cosine similarity between two vectors
-    float CalculateCosineSimilarity(const std::vector<float>& vec1, const std::vector<float>& vec2) const;
-
-    // Convert text to simple TF vector (term frequency)
-    std::vector<float> TextToTFVector(const std::string& text, const std::vector<std::string>& vocabulary) const;
+    std::unordered_map<std::string, float> BuildTermFreq(std::string const& text) const;
 
 private:
     std::vector<RAGEntry> m_ragEntries;
-    std::vector<std::string> m_vocabulary;
+    std::vector<EntryIndex> m_entryIndex;
     bool m_initialized;
 };
 

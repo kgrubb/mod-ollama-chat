@@ -1,9 +1,13 @@
 #include "mod-ollama-chat_config.h"
+#include "mod-ollama-chat_api.h"
+#include "mod-ollama-chat_memory.h"
+#include "mod-ollama-chat_handler.h"
+#include <atomic>
 #include "mod-ollama-chat_sentiment.h"
 #include "mod-ollama-chat_rag.h"
+#include "mod-ollama-chat_prompt.h"
 #include "Config.h"
 #include "Log.h"
-#include "mod-ollama-chat_api.h"
 #include <fmt/core.h>
 #include <sstream>
 #include <fstream>
@@ -14,7 +18,7 @@
 // --------------------------------------------
 float      g_SayDistance       = 30.0f;
 float      g_YellDistance      = 100.0f;
-float      g_RandomChatterRealPlayerDistance = 40.0f;
+float      g_RandomChatterRealPlayerDistance = 200.0f;
 float      g_EventChatterRealPlayerDistance = 40.0f;
 
 // --------------------------------------------
@@ -23,17 +27,17 @@ float      g_EventChatterRealPlayerDistance = 40.0f;
 // Per-channel-type reply chances
 uint32_t   g_PlayerReplyChance_Say     = 90;
 uint32_t   g_BotReplyChance_Say        = 10;
-uint32_t   g_PlayerReplyChance_Channel = 50;
-uint32_t   g_BotReplyChance_Channel    = 5;
+uint32_t   g_PlayerReplyChance_Channel = 60;
+uint32_t   g_BotReplyChance_Channel    = 3;
 uint32_t   g_PlayerReplyChance_Party   = 90;
-uint32_t   g_BotReplyChance_Party      = 10;
+uint32_t   g_BotReplyChance_Party      = 25;
 uint32_t   g_PlayerReplyChance_Guild   = 70;
 uint32_t   g_BotReplyChance_Guild      = 5;
 
 uint32_t   g_MaxBotsToPick     = 2;
 uint32_t   g_RandomChatterBotCommentChance   = 5;
 uint32_t   g_RandomChatterMaxBotsPerPlayer   = 2;
-uint32_t   g_EventChatterBotCommentChance    = 15;
+uint32_t   g_EventChatterBotCommentChance    = 25;
 uint32_t   g_EventChatterBotSelfCommentChance = 5;
 uint32_t   g_EventChatterMaxBotsPerPlayer    = 2;
 
@@ -43,7 +47,7 @@ uint32_t   g_EventChatterMaxBotsPerPlayer    = 2;
 std::string g_OllamaUrl        = "http://localhost:11434/api/generate";
 std::string g_OllamaModel      = "llama3.2:1b";
 std::string g_OllamaApiKey     = "";
-uint32_t    g_OllamaNumPredict = 40;
+uint32_t    g_OllamaNumPredict = 100;
 float       g_OllamaTemperature = 0.8f;
 float       g_OllamaTopP = 0.95f;
 float       g_OllamaRepeatPenalty = 1.1f;
@@ -130,7 +134,7 @@ time_t g_LastHistorySaveTime = 0;
 // --------------------------------------------
 // Bot-Player Sentiment Tracking System
 // --------------------------------------------
-bool        g_EnableSentimentTracking = true;
+bool        g_EnableSentimentTracking = false;
 float       g_SentimentDefaultValue = 0.5f;              // Default sentiment value (0.5 = neutral)
 float       g_SentimentAdjustmentStrength = 0.1f;        // How much to adjust sentiment per message
 uint32_t    g_SentimentSaveInterval = 10;                // How often to save sentiment to DB (minutes)
@@ -143,6 +147,24 @@ std::mutex g_SentimentMutex;
 time_t g_LastSentimentSaveTime = 0;
 
 // --------------------------------------------
+// Bot-Player Long-Term Memory
+// --------------------------------------------
+bool        g_EnableMemory = false;
+bool        g_PersistEpisodicMemory = true;
+std::string g_MemoryCompactionPrompt;
+
+std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::string>> g_SemanticMemory;
+std::unordered_map<uint64_t, std::unordered_map<uint64_t, uint32_t>> g_CompactedTurnCount;
+std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::deque<time_t>>> g_TurnTimestamps;
+std::unordered_map<uint64_t, std::unordered_map<uint64_t, time_t>> g_LastNudgeTime;
+std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::vector<std::pair<std::string, std::string>>>> g_ArchivePending;
+std::deque<MemoryJob> g_MemoryCompactionQueue;
+std::unordered_set<uint64_t> g_MemoryCompactionPending;
+std::mutex g_MemoryQueueMutex;
+std::atomic<uint32_t> g_MemoryCompactionInFlight{0};
+time_t g_LastMemorySaveTime = 0;
+
+// --------------------------------------------
 // RAG (Retrieval-Augmented Generation) System
 // --------------------------------------------
 bool        g_EnableRAG = false;
@@ -153,6 +175,13 @@ std::string g_RAGPromptTemplate;
 
 class OllamaRAGSystem;
 OllamaRAGSystem* g_RAGSystem = nullptr;
+
+std::string g_PromptDataPath;
+std::string g_SystemPromptOverride;
+uint32_t    g_RAGKnowledgeChance = 65;
+uint32_t    g_RAGKnowledgeZoneBonus = 20;
+uint32_t    g_RAGKnowledgeHomeZoneBonus = 15;
+uint32_t    g_RAGKnowledgeLowLevelPenalty = 25;
 
 // --------------------------------------------
 // Blacklist: Prefixes for Commands (not chat)
@@ -199,7 +228,7 @@ std::vector<std::string> g_GuildEnvCommentGuildCommunity;
 // --------------------------------------------
 bool        g_EnableGuildEventChatter             = true;
 bool        g_EnableGuildRandomAmbientChatter      = true;
-uint32_t    g_GuildRandomChatterChance             = 10;
+uint32_t    g_GuildRandomChatterChance             = 85;
 uint32_t    g_GuildChatterBotCommentChance          = 25;
 uint32_t    g_GuildChatterMaxBotsPerEvent           = 2;
 
@@ -276,8 +305,8 @@ bool g_DisableForParty = false;
 // Typing Simulation Settings
 // --------------------------------------------
 bool g_EnableTypingSimulation = false;
-uint32_t g_TypingSimulationBaseDelay = 1000;     // 1000ms base delay
-uint32_t g_TypingSimulationDelayPerChar = 250;   // 250ms per character (4 chars/sec)
+uint32_t g_TypingSimulationBaseDelay = 1000;
+uint32_t g_TypingSimulationDelayPerChar = 250;
 
 
 static std::vector<std::string> SplitString(const std::string& str, char delim)
@@ -377,10 +406,10 @@ void LoadOllamaChatConfig()
     // Load per-channel-type reply chances
     g_PlayerReplyChance_Say           = sConfigMgr->GetOption<uint32_t>("OllamaChat.PlayerReplyChance.Say", 90);
     g_BotReplyChance_Say              = sConfigMgr->GetOption<uint32_t>("OllamaChat.BotReplyChance.Say", 10);
-    g_PlayerReplyChance_Channel       = sConfigMgr->GetOption<uint32_t>("OllamaChat.PlayerReplyChance.Channel", 50);
-    g_BotReplyChance_Channel          = sConfigMgr->GetOption<uint32_t>("OllamaChat.BotReplyChance.Channel", 5);
+    g_PlayerReplyChance_Channel       = sConfigMgr->GetOption<uint32_t>("OllamaChat.PlayerReplyChance.Channel", 60);
+    g_BotReplyChance_Channel          = sConfigMgr->GetOption<uint32_t>("OllamaChat.BotReplyChance.Channel", 3);
     g_PlayerReplyChance_Party         = sConfigMgr->GetOption<uint32_t>("OllamaChat.PlayerReplyChance.Party", 90);
-    g_BotReplyChance_Party            = sConfigMgr->GetOption<uint32_t>("OllamaChat.BotReplyChance.Party", 10);
+    g_BotReplyChance_Party            = sConfigMgr->GetOption<uint32_t>("OllamaChat.BotReplyChance.Party", 25);
     g_PlayerReplyChance_Guild         = sConfigMgr->GetOption<uint32_t>("OllamaChat.PlayerReplyChance.Guild", 70);
     g_BotReplyChance_Guild            = sConfigMgr->GetOption<uint32_t>("OllamaChat.BotReplyChance.Guild", 5);
     
@@ -388,7 +417,7 @@ void LoadOllamaChatConfig()
     g_OllamaUrl                       = sConfigMgr->GetOption<std::string>("OllamaChat.Url", "http://localhost:11434/api/generate");
     g_OllamaModel                     = sConfigMgr->GetOption<std::string>("OllamaChat.Model", "llama3.2:1b");
     g_OllamaApiKey                    = sConfigMgr->GetOption<std::string>("OllamaChat.ApiKey", "");
-    g_OllamaNumPredict                = sConfigMgr->GetOption<uint32_t>("OllamaChat.NumPredict", 40);
+    g_OllamaNumPredict                = sConfigMgr->GetOption<uint32_t>("OllamaChat.NumPredict", 100);
     g_OllamaTemperature               = sConfigMgr->GetOption<float>("OllamaChat.Temperature", 0.8f);
     g_OllamaTopP                      = sConfigMgr->GetOption<float>("OllamaChat.TopP", 0.95f);
     g_OllamaRepeatPenalty             = sConfigMgr->GetOption<float>("OllamaChat.RepeatPenalty", 1.1f);
@@ -411,15 +440,15 @@ void LoadOllamaChatConfig()
 
     g_MinRandomInterval               = sConfigMgr->GetOption<uint32_t>("OllamaChat.MinRandomInterval", 45);
     g_MaxRandomInterval               = sConfigMgr->GetOption<uint32_t>("OllamaChat.MaxRandomInterval", 180);
-    g_RandomChatterRealPlayerDistance = sConfigMgr->GetOption<float>("OllamaChat.RandomChatterRealPlayerDistance", 40.0f);
-    g_RandomChatterBotCommentChance   = sConfigMgr->GetOption<uint32_t>("OllamaChat.RandomChatterBotCommentChance", 25);
+    g_RandomChatterRealPlayerDistance = sConfigMgr->GetOption<float>("OllamaChat.RandomChatterRealPlayerDistance", 200.0f);
+    g_RandomChatterBotCommentChance   = sConfigMgr->GetOption<uint32_t>("OllamaChat.RandomChatterBotCommentChance", 5);
     g_RandomChatterMaxBotsPerPlayer   = sConfigMgr->GetOption<uint32_t>("OllamaChat.RandomChatterMaxBotsPerPlayer", 2);
 
     g_EnableGuildRandomAmbientChatter = sConfigMgr->GetOption<bool>("OllamaChat.EnableGuildRandomAmbientChatter", true);
-    g_GuildRandomChatterChance        = sConfigMgr->GetOption<uint32_t>("OllamaChat.GuildRandomChatterChance", 10);
+    g_GuildRandomChatterChance        = sConfigMgr->GetOption<uint32_t>("OllamaChat.GuildRandomChatterChance", 85);
 
     g_EventChatterRealPlayerDistance = sConfigMgr->GetOption<float>("OllamaChat.EventChatterRealPlayerDistance", 40.0f);
-    g_EventChatterBotCommentChance   = sConfigMgr->GetOption<uint32_t>("OllamaChat.EventChatterBotCommentChance", 15);
+    g_EventChatterBotCommentChance   = sConfigMgr->GetOption<uint32_t>("OllamaChat.EventChatterBotCommentChance", 25);
     g_EventChatterBotSelfCommentChance = sConfigMgr->GetOption<uint32_t>("OllamaChat.EventChatterBotSelfCommentChance", 5);
     g_EventChatterMaxBotsPerPlayer   = sConfigMgr->GetOption<uint32_t>("OllamaChat.EventChatterMaxBotsPerPlayer", 2);
 
@@ -480,19 +509,34 @@ void LoadOllamaChatConfig()
     g_EnableChatHistory               = sConfigMgr->GetOption<bool>("OllamaChat.EnableChatHistory", true);
 
     // Bot-Player Sentiment Tracking
-    g_EnableSentimentTracking         = sConfigMgr->GetOption<bool>("OllamaChat.EnableSentimentTracking", true);
+    g_EnableSentimentTracking         = sConfigMgr->GetOption<bool>("OllamaChat.EnableSentimentTracking", false);
     g_SentimentDefaultValue           = sConfigMgr->GetOption<float>("OllamaChat.SentimentDefaultValue", 0.5f);
     g_SentimentAdjustmentStrength     = sConfigMgr->GetOption<float>("OllamaChat.SentimentAdjustmentStrength", 0.1f);
     g_SentimentSaveInterval           = sConfigMgr->GetOption<uint32_t>("OllamaChat.SentimentSaveInterval", 10);
     g_SentimentAnalysisPrompt         = sConfigMgr->GetOption<std::string>("OllamaChat.SentimentAnalysisPrompt", "Analyze the sentiment of this message: \"{message}\". Respond only with: POSITIVE, NEGATIVE, or NEUTRAL.");
     g_SentimentPromptTemplate         = sConfigMgr->GetOption<std::string>("OllamaChat.SentimentPromptTemplate", "Your relationship sentiment with {player_name} is {sentiment_value} (0.0=hostile, 0.5=neutral, 1.0=friendly). Use this to guide your tone and response.");
 
+    g_EnableMemory                    = sConfigMgr->GetOption<bool>("OllamaChat.EnableMemory", false);
+    g_PersistEpisodicMemory           = sConfigMgr->GetOption<bool>("OllamaChat.PersistEpisodicMemory", true);
+    g_MemoryCompactionPrompt          = sConfigMgr->GetOption<std::string>("OllamaChat.MemoryCompactionPrompt", "");
+
     // RAG (Retrieval-Augmented Generation) System
     g_EnableRAG                       = sConfigMgr->GetOption<bool>("OllamaChat.EnableRAG", false);
-    g_RAGDataPath                     = sConfigMgr->GetOption<std::string>("OllamaChat.RAGDataPath", "rag/");
+    g_RAGDataPath                     = sConfigMgr->GetOption<std::string>("OllamaChat.RAGDataPath", "../../../modules/mod-ollama-chat/data/rag/");
     g_RAGMaxRetrievedItems            = sConfigMgr->GetOption<uint32_t>("OllamaChat.RAGMaxRetrievedItems", 3);
     g_RAGSimilarityThreshold          = sConfigMgr->GetOption<float>("OllamaChat.RAGSimilarityThreshold", 0.3f);
-    g_RAGPromptTemplate               = sConfigMgr->GetOption<std::string>("OllamaChat.RAGPromptTemplate", "RELEVANT INFORMATION:\n{rag_info}\nUse this information to provide accurate and detailed responses when applicable.");
+    g_RAGPromptTemplate               = sConfigMgr->GetOption<std::string>("OllamaChat.RAGPromptTemplate",
+        "RELEVANT INFORMATION:\n{rag_info}\nUse this information to provide accurate and detailed responses when applicable.");
+
+    g_PromptDataPath                  = sConfigMgr->GetOption<std::string>("OllamaChat.PromptDataPath", "../../../modules/mod-ollama-chat/data/prompts/");
+    g_SystemPromptOverride            = sConfigMgr->GetOption<std::string>("OllamaChat.SystemPromptOverride", "");
+
+    g_RAGKnowledgeChance              = sConfigMgr->GetOption<uint32_t>("OllamaChat.RAGKnowledgeChance", 65);
+    g_RAGKnowledgeZoneBonus           = sConfigMgr->GetOption<uint32_t>("OllamaChat.RAGKnowledgeZoneBonus", 20);
+    g_RAGKnowledgeHomeZoneBonus       = sConfigMgr->GetOption<uint32_t>("OllamaChat.RAGKnowledgeHomeZoneBonus", 15);
+    g_RAGKnowledgeLowLevelPenalty     = sConfigMgr->GetOption<uint32_t>("OllamaChat.RAGKnowledgeLowLevelPenalty", 25);
+
+    OllamaPromptComposer::LoadPromptFiles();
 
     g_ThinkModeEnableForModule        = sConfigMgr->GetOption<bool>("OllamaChat.ThinkModeEnableForModule", false);
 
@@ -714,12 +758,66 @@ void LoadBotConversationHistoryFromDB()
 // Definition of the configuration WorldScript.
 OllamaChatConfigWorldScript::OllamaChatConfigWorldScript() : WorldScript("OllamaChatConfigWorldScript") { }
 
+void ReloadOllamaRAGSystem()
+{
+    if (!g_EnableRAG)
+    {
+        if (g_RAGSystem)
+        {
+            delete g_RAGSystem;
+            g_RAGSystem = nullptr;
+        }
+        return;
+    }
+
+    if (g_RAGSystem)
+    {
+        g_RAGSystem->Reload();
+        LOG_INFO("server.loading", "[Ollama Chat] RAG system reloaded");
+        return;
+    }
+
+    g_RAGSystem = new OllamaRAGSystem();
+    if (!g_RAGSystem->Initialize())
+    {
+        LOG_ERROR("server.loading", "[Ollama Chat] Failed to initialize RAG system on reload");
+        delete g_RAGSystem;
+        g_RAGSystem = nullptr;
+    }
+}
+
+void OllamaChatConfigWorldScript::OnUpdate(uint32 diff)
+{
+    if (!g_EnableMemory)
+        return;
+
+    static uint32_t timer = 0;
+    timer += diff;
+    if (timer < OllamaMemory::MemoryTickIntervalMs)
+        return;
+    timer = 0;
+
+    ProcessMemoryCompactionTick();
+    if (OllamaMemory::SaveIntervalMinutes > 0)
+    {
+        time_t now = time(nullptr);
+        if (difftime(now, g_LastMemorySaveTime) >= static_cast<double>(OllamaMemory::SaveIntervalMinutes) * 60 &&
+            SaveBotMemoryToDB(false))
+            g_LastMemorySaveTime = now;
+    }
+}
+
 void OllamaChatConfigWorldScript::OnStartup()
 {
     LoadOllamaChatConfig();
     LoadBotPersonalityList();
-    LoadBotConversationHistoryFromDB();
+    if (!g_EnableMemory)
+        LoadBotConversationHistoryFromDB();
     InitializeSentimentTracking();
+    InitializeBotMemory();
+
+    if (g_Enable)
+        ValidateOllamaModel();
 
     // Initialize RAG system if enabled
     if (g_EnableRAG) {
@@ -739,6 +837,13 @@ void OllamaChatConfigWorldScript::OnStartup()
 
 void OllamaChatConfigWorldScript::OnShutdown()
 {
+    if (!g_EnableMemory)
+        SaveBotConversationHistoryToDB();
+    if (g_EnableSentimentTracking)
+        SaveBotPlayerSentimentsToDB();
+    if (g_EnableMemory)
+        SaveBotMemoryToDB(true);
+
     // Clean up RAG system
     if (g_RAGSystem) {
         delete g_RAGSystem;

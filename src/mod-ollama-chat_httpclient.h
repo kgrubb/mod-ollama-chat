@@ -1,7 +1,10 @@
 #ifndef OLLAMA_HTTP_CLIENT_H
 #define OLLAMA_HTTP_CLIENT_H
 
+#include <atomic>
 #include <string>
+
+struct ParsedUrl;
 
 class OllamaHttpClient
 {
@@ -9,18 +12,26 @@ public:
     OllamaHttpClient();
     ~OllamaHttpClient();
 
-    // Make HTTP POST request to Ollama API
-    std::string Post(const std::string& url, const std::string& jsonData, const std::string& bearerToken = "");
-    
-    // Set timeout for requests (in seconds)
+    std::string Post(std::string const& url, std::string const& jsonData, std::string const& bearerToken = "");
+    std::string Get(std::string const& url, std::string const& bearerToken = "");
     void SetTimeout(int seconds);
-    
-    // Check if HTTP client is available
-    bool IsAvailable() const;
 
 private:
-    int m_timeout;
-    bool m_available;
+    enum class PostStatus { Success, Retry, Fail };
+
+    struct HttpAttempt
+    {
+        std::string body;
+        PostStatus status = PostStatus::Fail;
+    };
+
+    HttpAttempt PostOnce(ParsedUrl const& parts, std::string const& jsonData, std::string const& bearerToken) const;
+    HttpAttempt GetOnce(ParsedUrl const& parts, std::string const& bearerToken) const;
+    void MarkAvailable(bool available);
+
+    int m_readTimeout;
+    int m_connectTimeout;
+    std::atomic<bool> m_available;
 };
 
 #endif // OLLAMA_HTTP_CLIENT_H

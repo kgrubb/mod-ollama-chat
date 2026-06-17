@@ -11,7 +11,7 @@
     "title": "Gold Making Methods",
     "content": "Gold can be made through professions, auction house trading, farming rare mobs, completing quests, and running dungeons. Blacksmithing and enchanting are profitable. Understanding market demand is key. Some methods require significant time investment. Gold is used for mounts, repairs, and training.",
     "keywords": ["gold making", "professions", "auction house", "farming", "trading", "market", "blacksmithing", "enchanting", "profitable", "demand", "time investment", "mounts", "repairs", "training", "rare mobs", "quests", "dungeons"],
-    "tags": ["general", "economy", "gold", "professions"]
+    "tags": ["general", "economy", "gold", "professions", "level:60-80"]
   },
   {
     "id": "general_ui_customization",
@@ -159,5 +159,33 @@
     "content": "Gear up with PvP-specific items and enchants. Learn class matchups and counters. Practice in battlegrounds or world PvP. Understand crowd control and interrupts. Know when to engage and when to retreat. Team coordination is essential. PvP requires different tactics than PvE combat.",
     "keywords": ["pvp preparation", "gear", "enchants", "matchups", "counters", "practice", "battlegrounds", "world pvp", "crowd control", "interrupts", "engage", "retreat", "coordination", "tactics", "pve"],
     "tags": ["general", "pvp", "preparation", "combat"]
+  },
+  {
+    "id": "general_northrend_leveling",
+    "title": "Northrend Leveling Route",
+    "content": "Players typically start Northrend at 68 in Howling Fjord or Borean Tundra, then progress through Dragonblight, Grizzly Hills or Zul'Drak, Sholazar Basin, Storm Peaks, and Icecrown to 80. Cold weather flying at 77 speeds travel. Quest density favors completing one zone before moving on.",
+    "keywords": ["northrend", "leveling", "howling fjord", "borean tundra", "route", "68", "80"],
+    "tags": ["general", "leveling", "wrath", "northrend"]
+  },
+  {
+    "id": "general_heroic_daily",
+    "title": "Heroic Daily Emblem Farm",
+    "content": "The random heroic daily via Dungeon Finder grants emblems (Triumph then Frost in 3.3) and gold. Running heroics at 80 is the primary gearing path for alts and mains between raids. Tank and healer roles have faster queues.",
+    "keywords": ["heroic", "daily", "emblem", "dungeon finder", "frost", "triumph", "farm"],
+    "tags": ["general", "endgame", "wrath", "instances"]
+  },
+  {
+    "id": "general_outland_to_northrend",
+    "title": "Outland to Northrend Transition",
+    "content": "After level 68, players take the boat from Stormwind Harbor or zeppelin from Tirisfal/Orgrimmar Tower to Valgarde or Warsong Hold. Outland content (58-70) uses TBC zones; Northrend replaces it as the leveling path through 80.",
+    "keywords": ["outland", "northrend", "68", "boat", "zeppelin", "valgarde", "warsong hold", "transition"],
+    "tags": ["general", "leveling", "wrath"]
+  },
+  {
+    "id": "general_gear_score",
+    "title": "Gear Score and Item Level",
+    "content": "Item level (ilvl) determines stat budgets in Wrath. Heroics require ~180 ilvl average; ICC heroics expect 245+. Players reference gear score addons to evaluate raid readiness. Tier, emblem, and crafted gear mix to reach caps.",
+    "keywords": ["gear score", "ilvl", "item level", "heroic", "icc", "gearing", "requirements"],
+    "tags": ["general", "endgame", "wrath", "gear"]
   }
 ]

@@ -10,76 +10,138 @@
 
 namespace fs = std::filesystem;
 
+namespace
+{
+constexpr char const* kRagFallbackPaths[] = {
+    "/azerothcore/modules/mod-ollama-chat/data/rag/",
+    "../../../modules/mod-ollama-chat/data/rag/",
+    "modules/mod-ollama-chat/data/rag/",
+    "data/rag/",
+    "rag/",
+};
+
+bool RagDirHasJson(std::string const& path)
+{
+    try
+    {
+        if (!fs::exists(path) || !fs::is_directory(path))
+            return false;
+        for (auto const& e : fs::directory_iterator(path))
+            if (e.is_regular_file() && e.path().extension() == ".json")
+                return true;
+    }
+    catch (std::exception const&) {}
+    return false;
+}
+
+std::string ResolveRagPath(std::string const& configured)
+{
+    if (!configured.empty() && RagDirHasJson(configured))
+        return configured;
+    for (char const* fallback : kRagFallbackPaths)
+        if (RagDirHasJson(fallback))
+            return fallback;
+    return configured.empty() ? kRagFallbackPaths[0] : configured;
+}
+
+bool TagContains(std::vector<std::string> const& tags, std::string const& needle)
+{
+    for (auto const& tag : tags)
+    {
+        if (tag.find(needle) != std::string::npos)
+            return true;
+    }
+    return false;
+}
+} // namespace
+
 OllamaRAGSystem::OllamaRAGSystem() : m_initialized(false) {}
 
 OllamaRAGSystem::~OllamaRAGSystem() {}
 
 bool OllamaRAGSystem::Initialize()
 {
-    if (m_initialized) {
+    if (m_initialized)
         return true;
-    }
 
     m_ragEntries.clear();
-    m_vocabulary.clear();
+    m_entryIndex.clear();
 
-    // Use the configured RAG data path directly
-    std::string fullPath = g_RAGDataPath;
+    std::string const dataPath = ResolveRagPath(g_RAGDataPath);
+    if (dataPath != g_RAGDataPath)
+        g_RAGDataPath = dataPath;
 
-    if (!LoadRAGDataFromDirectory(fullPath)) {
-        LOG_ERROR("server.loading", "[Ollama Chat RAG] Failed to load RAG data from directory: {}", fullPath);
+    if (!LoadRAGDataFromDirectory(dataPath))
+    {
+        LOG_ERROR("server.loading", "[Ollama Chat RAG] Failed to load RAG data from directory: {}", dataPath);
         return false;
     }
 
-    // Build vocabulary from all entries
-    std::unordered_set<std::string> vocabSet;
-    for (const auto& entry : m_ragEntries) {
-        auto tokens = TokenizeText(PreprocessText(entry.title + " " + entry.content));
-        for (const auto& token : tokens) {
-            vocabSet.insert(token);
-        }
-        for (const auto& keyword : entry.keywords) {
-            auto keywordTokens = TokenizeText(PreprocessText(keyword));
-            for (const auto& token : keywordTokens) {
-                vocabSet.insert(token);
-            }
-        }
-    }
-    m_vocabulary.assign(vocabSet.begin(), vocabSet.end());
+    BuildEntryIndex();
 
     m_initialized = true;
-    LOG_INFO("server.loading", "[Ollama Chat RAG] Initialized with {} entries and {} vocabulary terms",
-             m_ragEntries.size(), m_vocabulary.size());
+    LOG_INFO("server.loading", "[Ollama Chat RAG] Initialized with {} entries",
+             m_ragEntries.size());
 
     return true;
 }
 
+void OllamaRAGSystem::BuildEntryIndex()
+{
+    m_entryIndex.clear();
+    m_entryIndex.reserve(m_ragEntries.size());
+
+    for (auto const& entry : m_ragEntries)
+    {
+        EntryIndex idx;
+        std::string entryText = entry.title + " " + entry.content;
+        for (auto const& keyword : entry.keywords)
+            entryText += " " + keyword;
+
+        idx.termFreq = BuildTermFreq(entryText);
+        for (auto const& [_, freq] : idx.termFreq)
+            idx.normSq += freq * freq;
+
+        idx.factualTagBoost = TagContains(entry.tags, "landmark") || TagContains(entry.tags, "quest")
+            || TagContains(entry.tags, "npc") || TagContains(entry.tags, "zone");
+        idx.mechanicsTagPenalty = TagContains(entry.tags, "dps") || TagContains(entry.tags, "mechanics")
+            || TagContains(entry.tags, "class");
+
+        m_entryIndex.push_back(std::move(idx));
+    }
+}
+
 bool OllamaRAGSystem::LoadRAGDataFromDirectory(const std::string& directoryPath)
 {
-    try {
-        if (!fs::exists(directoryPath)) {
+    try
+    {
+        if (!fs::exists(directoryPath))
+        {
             LOG_ERROR("server.loading", "[Ollama Chat RAG] Directory does not exist: {}", directoryPath);
             return false;
         }
 
-        if (!fs::is_directory(directoryPath)) {
+        if (!fs::is_directory(directoryPath))
+        {
             LOG_ERROR("server.loading", "[Ollama Chat RAG] Path is not a directory: {}", directoryPath);
             return false;
         }
 
         uint32_t loadedFiles = 0;
-        for (const auto& entry : fs::directory_iterator(directoryPath)) {
-            if (entry.is_regular_file() && entry.path().extension() == ".json") {
-                if (LoadRAGDataFromFile(entry.path().string())) {
+        for (const auto& entry : fs::directory_iterator(directoryPath))
+        {
+            if (entry.is_regular_file() && entry.path().extension() == ".json")
+            {
+                if (LoadRAGDataFromFile(entry.path().string()))
                     loadedFiles++;
-                }
             }
         }
 
         LOG_INFO("server.loading", "[Ollama Chat RAG] Loaded {} JSON files from {}", loadedFiles, directoryPath);
         return loadedFiles > 0;
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& e)
+    {
         LOG_ERROR("server.loading", "[Ollama Chat RAG] Error loading directory {}: {}", directoryPath, e.what());
         return false;
     }
@@ -87,9 +149,11 @@ bool OllamaRAGSystem::LoadRAGDataFromDirectory(const std::string& directoryPath)
 
 bool OllamaRAGSystem::LoadRAGDataFromFile(const std::string& filePath)
 {
-    try {
+    try
+    {
         std::ifstream file(filePath);
-        if (!file.is_open()) {
+        if (!file.is_open())
+        {
             LOG_ERROR("server.loading", "[Ollama Chat RAG] Cannot open file: {}", filePath);
             return false;
         }
@@ -97,42 +161,49 @@ bool OllamaRAGSystem::LoadRAGDataFromFile(const std::string& filePath)
         nlohmann::json jsonData;
         file >> jsonData;
 
-        if (!jsonData.is_array()) {
+        if (!jsonData.is_array())
+        {
             LOG_ERROR("server.loading", "[Ollama Chat RAG] JSON file must contain an array of entries: {}", filePath);
             return false;
         }
 
         uint32_t entriesLoaded = 0;
-        for (const auto& item : jsonData) {
-            try {
+        for (const auto& item : jsonData)
+        {
+            try
+            {
                 RAGEntry entry;
                 entry.id = item.value("id", "");
                 entry.title = item.value("title", "");
                 entry.content = item.value("content", "");
 
-                if (entry.id.empty() || entry.content.empty()) {
+                if (entry.id.empty() || entry.content.empty())
+                {
                     LOG_ERROR("server.loading", "[Ollama Chat RAG] Entry missing required 'id' or 'content' field in file: {}", filePath);
                     continue;
                 }
 
-                // Load keywords array
-                if (item.contains("keywords") && item["keywords"].is_array()) {
-                    for (const auto& keyword : item["keywords"]) {
+                if (item.contains("keywords") && item["keywords"].is_array())
+                {
+                    for (const auto& keyword : item["keywords"])
                         entry.keywords.push_back(keyword.get<std::string>());
+                }
+
+                if (item.contains("tags") && item["tags"].is_array())
+                {
+                    for (const auto& tag : item["tags"])
+                    {
+                        std::string t = tag.get<std::string>();
+                        std::transform(t.begin(), t.end(), t.begin(), ::tolower);
+                        entry.tags.push_back(std::move(t));
                     }
                 }
 
-                // Load tags array
-                if (item.contains("tags") && item["tags"].is_array()) {
-                    for (const auto& tag : item["tags"]) {
-                        entry.tags.push_back(tag.get<std::string>());
-                    }
-                }
-
-                m_ragEntries.push_back(entry);
+                m_ragEntries.push_back(std::move(entry));
                 entriesLoaded++;
             }
-            catch (const std::exception& e) {
+            catch (const std::exception& e)
+            {
                 LOG_ERROR("server.loading", "[Ollama Chat RAG] Error parsing entry in {}: {}", filePath, e.what());
             }
         }
@@ -140,36 +211,58 @@ bool OllamaRAGSystem::LoadRAGDataFromFile(const std::string& filePath)
         LOG_INFO("server.loading", "[Ollama Chat RAG] Loaded {} entries from {}", entriesLoaded, filePath);
         return entriesLoaded > 0;
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& e)
+    {
         LOG_ERROR("server.loading", "[Ollama Chat RAG] Error loading file {}: {}", filePath, e.what());
         return false;
     }
 }
 
+void OllamaRAGSystem::Reload()
+{
+    m_initialized = false;
+    Initialize();
+}
+
 std::vector<RAGResult> OllamaRAGSystem::RetrieveRelevantInfo(const std::string& query, uint32_t maxResults, float similarityThreshold)
+{
+    return RetrieveRelevantInfo(query, maxResults, similarityThreshold, false);
+}
+
+std::vector<RAGResult> OllamaRAGSystem::RetrieveRelevantInfo(
+    const std::string& query, uint32_t maxResults, float similarityThreshold, bool factualQuery)
 {
     std::vector<RAGResult> results;
 
-    if (!m_initialized || query.empty()) {
+    if (!m_initialized || query.empty() || maxResults == 0)
         return results;
+
+    auto queryTf = BuildTermFreq(query);
+    float queryNormSq = 0.0f;
+    for (auto const& [_, freq] : queryTf)
+        queryNormSq += freq * freq;
+
+    if (queryNormSq == 0.0f)
+        return results;
+
+    for (size_t i = 0; i < m_ragEntries.size(); ++i)
+    {
+        float similarity = CalculateSimilarity(queryTf, queryNormSq, i, factualQuery);
+        if (similarity >= similarityThreshold)
+            results.push_back({ &m_ragEntries[i], similarity });
     }
 
-    for (const auto& entry : m_ragEntries) {
-        float similarity = CalculateSimilarity(query, entry);
-        if (similarity >= similarityThreshold) {
-            results.push_back({&entry, similarity});
-        }
-    }
-
-    // Sort by similarity (highest first)
-    std::sort(results.begin(), results.end(),
-              [](const RAGResult& a, const RAGResult& b) {
-                  return a.similarity > b.similarity;
-              });
-
-    // Limit results
-    if (results.size() > maxResults) {
+    if (results.size() > maxResults)
+    {
+        std::partial_sort(
+            results.begin(), results.begin() + maxResults, results.end(),
+            [](RAGResult const& a, RAGResult const& b) { return a.similarity > b.similarity; });
         results.resize(maxResults);
+    }
+    else if (results.size() > 1)
+    {
+        std::sort(results.begin(), results.end(),
+            [](RAGResult const& a, RAGResult const& b) { return a.similarity > b.similarity; });
     }
 
     return results;
@@ -177,47 +270,60 @@ std::vector<RAGResult> OllamaRAGSystem::RetrieveRelevantInfo(const std::string& 
 
 std::string OllamaRAGSystem::GetFormattedRAGInfo(const std::vector<RAGResult>& results)
 {
-    if (results.empty()) {
+    if (results.empty())
         return "";
-    }
 
-    std::stringstream ss;
-    for (size_t i = 0; i < results.size(); ++i) {
-        const auto& result = results[i];
-        ss << "- " << result.entry->title << ": " << result.entry->content;
-        if (i < results.size() - 1) {
+    std::ostringstream ss;
+    for (size_t i = 0; i < results.size(); ++i)
+    {
+        if (i > 0)
             ss << "\n";
-        }
+        ss << "- " << results[i].entry->title << ": " << results[i].entry->content;
     }
 
     return ss.str();
 }
 
-float OllamaRAGSystem::CalculateSimilarity(const std::string& query, const RAGEntry& entry)
+float OllamaRAGSystem::CalculateSimilarity(
+    std::unordered_map<std::string, float> const& queryTf,
+    float queryNormSq,
+    size_t entryIndex,
+    bool factualQuery) const
 {
-    // Combine entry content with keywords for better matching
-    std::string entryText = entry.title + " " + entry.content;
-    for (const auto& keyword : entry.keywords) {
-        entryText += " " + keyword;
+    if (entryIndex >= m_entryIndex.size() || queryNormSq == 0.0f)
+        return 0.0f;
+
+    EntryIndex const& idx = m_entryIndex[entryIndex];
+    if (idx.normSq == 0.0f)
+        return 0.0f;
+
+    float dot = 0.0f;
+    for (auto const& [term, qFreq] : queryTf)
+    {
+        auto it = idx.termFreq.find(term);
+        if (it != idx.termFreq.end())
+            dot += qFreq * it->second;
     }
 
-    // Simple TF-IDF like similarity using term frequency vectors
-    auto queryVector = TextToTFVector(PreprocessText(query), m_vocabulary);
-    auto entryVector = TextToTFVector(PreprocessText(entryText), m_vocabulary);
+    float sim = dot / (std::sqrt(queryNormSq) * std::sqrt(idx.normSq));
 
-    return CalculateCosineSimilarity(queryVector, entryVector);
+    if (factualQuery)
+    {
+        if (idx.factualTagBoost)
+            sim += 0.08f;
+        if (idx.mechanicsTagPenalty)
+            sim -= 0.05f;
+    }
+
+    return std::max(0.0f, sim);
 }
 
 std::string OllamaRAGSystem::PreprocessText(const std::string& text) const
 {
     std::string result = text;
-    // Convert to lowercase
     std::transform(result.begin(), result.end(), result.begin(), ::tolower);
-
-    // Remove punctuation (simple approach)
     result.erase(std::remove_if(result.begin(), result.end(),
-                                [](char c) { return std::ispunct(c); }), result.end());
-
+        [](char c) { return std::ispunct(c); }), result.end());
     return result;
 }
 
@@ -226,58 +332,20 @@ std::vector<std::string> OllamaRAGSystem::TokenizeText(const std::string& text) 
     std::vector<std::string> tokens;
     std::stringstream ss(text);
     std::string token;
-    while (ss >> token) {
-        if (!token.empty()) {
-            tokens.push_back(token);
-        }
+    while (ss >> token)
+    {
+        if (!token.empty())
+            tokens.push_back(std::move(token));
     }
     return tokens;
 }
 
-float OllamaRAGSystem::CalculateCosineSimilarity(const std::vector<float>& vec1, const std::vector<float>& vec2) const
+std::unordered_map<std::string, float> OllamaRAGSystem::BuildTermFreq(std::string const& text) const
 {
-    if (vec1.size() != vec2.size()) {
-        return 0.0f;
-    }
-
-    float dotProduct = 0.0f;
-    float norm1 = 0.0f;
-    float norm2 = 0.0f;
-
-    for (size_t i = 0; i < vec1.size(); ++i) {
-        dotProduct += vec1[i] * vec2[i];
-        norm1 += vec1[i] * vec1[i];
-        norm2 += vec2[i] * vec2[i];
-    }
-
-    norm1 = std::sqrt(norm1);
-    norm2 = std::sqrt(norm2);
-
-    if (norm1 == 0.0f || norm2 == 0.0f) {
-        return 0.0f;
-    }
-
-    return dotProduct / (norm1 * norm2);
-}
-
-std::vector<float> OllamaRAGSystem::TextToTFVector(const std::string& text, const std::vector<std::string>& vocabulary) const
-{
-    auto tokens = TokenizeText(text);
-    std::unordered_map<std::string, int> termFreq;
-
-    // Count term frequencies
-    for (const auto& token : tokens) {
-        termFreq[token]++;
-    }
-
-    // Create TF vector
-    std::vector<float> vector(vocabulary.size(), 0.0f);
-    for (size_t i = 0; i < vocabulary.size(); ++i) {
-        auto it = termFreq.find(vocabulary[i]);
-        if (it != termFreq.end()) {
-            vector[i] = static_cast<float>(it->second);
-        }
-    }
-
-    return vector;
+    auto tokens = TokenizeText(PreprocessText(text));
+    std::unordered_map<std::string, float> tf;
+    tf.reserve(tokens.size());
+    for (auto const& token : tokens)
+        tf[token] += 1.0f;
+    return tf;
 }

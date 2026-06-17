@@ -34,7 +34,9 @@
   When enabled, each bot is assigned a personality type (e.g., Gamer, Roleplayer, Trickster) that modifies its chat style. Personalities influence prompt generation and result in varied, immersive responses.
 
 - **Context-Aware Prompt Generation:**  
-  The module gathers extensive context about both the bot and the interacting player—including class, race, role, faction, guild, and more—to generate prompts for the LLM. A comprehensive WoW cheat sheet is appended to every prompt to ensure the LLM replies with accurate lore, terminology, and in-character language spanning Vanilla WoW, The Burning Crusade, and Wrath of the Lich King.
+  Legacy `OllamaChat.*PromptTemplate` settings still work. Clear them to use file-based prompts from `data/prompts/` via **OllamaPromptComposer**. Upstream `conf.dist` ships legacy templates; General (`/1`) voice is still injected via composer enrichment on replies.
+
+- **Kubernetes / Docker:** `conf.dist` follows upstream defaults. Override `OllamaChat.Url`, `OllamaChat.Model`, and `OllamaChat.ApiKey` as needed; data paths resolve under `/azerothcore/modules/mod-ollama-chat/data/`.
 
 - **Random Chatter:**  
   Bots can periodically initiate random, environment-based chat when a real player is nearby. This feature adds an extra layer of immersion to the game world.
@@ -43,6 +45,8 @@
   Bots now have configurable short-term chat memory. Recent conversations between each player and bot are stored and included as context in every LLM prompt, giving responses better context and continuity.
 
   Bots now recall your recent interactions—responses will reflect the last several lines of chat with each player.
+
+- **Long-Term Bot Memory:** Optional per bot-player semantic memory with LLM compaction and relevance-based recall (`OllamaChat.EnableMemory`).
 
 - **Blacklist for Playerbot Commands:**  
   A configurable blacklist prevents bots from responding to chat messages that start with common playerbot command prefixes, ensuring that administrative commands are not inadvertently processed. Additional commands can be appended via the configuration.
@@ -199,10 +203,20 @@ This should return a JSON response listing available models. If you get a connec
 The module provides several in-game text commands for administrators (Game Masters) to manage and monitor the Ollama chat functionality. All commands require **SEC_ADMINISTRATOR** security level (GM level 3 or higher).
 
 ### `.ollama reload`
-Reloads the module's configuration from `mod-ollama-chat.conf` without restarting the server. Also reloads personality packs and sentiment data.
+Reloads the module's configuration from `mod-ollama-chat.conf` without restarting the server. Also reloads personality packs, sentiment data, and bot memory.
 - **Security Level:** SEC_ADMINISTRATOR
 - **Usage:** `.ollama reload`
 - **Console Equivalent:** `ollama reload`
+
+### `.ollama memory`
+Optional long-term bot-player memory. Set `OllamaChat.EnableMemory = 1`, then `.ollama reload`.
+- **Security Level:** SEC_ADMINISTRATOR
+- **Usage:**
+  - `.ollama memory view [bot] [player]` — inspect memory
+  - `.ollama memory reset [bot] [player]` — clear RAM and DB
+  - `.ollama memory compact <bot> <player>` — queue compaction
+- Bot and player accept online names or numeric GUIDs. See `conf/mod_ollama_chat.conf.dist` and `src/mod-ollama-chat_memory.h` for other settings.
+- **Console Equivalent:** `ollama memory view|reset|compact ...`
 
 ### `.ollama sentiment view [bot_name] [player_name]`
 Displays sentiment tracking data between bots and players.

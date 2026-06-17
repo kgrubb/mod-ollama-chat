@@ -2,6 +2,8 @@
 #include "mod-ollama-chat_config.h"
 #include "mod-ollama-chat_sentiment.h"
 #include "mod-ollama-chat_personality.h"
+#include "mod-ollama-chat_memory.h"
+#include "mod-ollama-chat_handler.h"
 #include "Chat.h"
 #include "Config.h"
 #include "ObjectAccessor.h"
@@ -10,6 +12,27 @@
 #include <fmt/core.h>
 
 using namespace Acore::ChatCommands;
+
+namespace
+{
+
+uint64_t ResolveMemoryGuidArg(Optional<std::string> const& arg)
+{
+    if (!arg)
+        return 0;
+    if (Player* player = ObjectAccessor::FindPlayerByName(*arg))
+        return player->GetGUID().GetRawValue();
+    try
+    {
+        return std::stoull(*arg, nullptr, 10);
+    }
+    catch (...)
+    {
+        return 0;
+    }
+}
+
+} // namespace
 
 OllamaChatConfigCommand::OllamaChatConfigCommand()
     : CommandScript("OllamaChatConfigCommand")
@@ -32,11 +55,19 @@ ChatCommandTable OllamaChatConfigCommand::GetCommands() const
         { "list", HandleOllamaPersonalityListCommand, SEC_ADMINISTRATOR, Console::Yes }
     };
 
+    static ChatCommandTable ollamaMemoryCommandTable =
+    {
+        { "view",   HandleOllamaMemoryViewCommand,   SEC_ADMINISTRATOR, Console::Yes },
+        { "reset",  HandleOllamaMemoryResetCommand,  SEC_ADMINISTRATOR, Console::Yes },
+        { "compact", HandleOllamaMemoryCompactCommand, SEC_ADMINISTRATOR, Console::Yes }
+    };
+
     static ChatCommandTable ollamaReloadCommandTable =
     {
         { "reload",      HandleOllamaReloadCommand,  SEC_ADMINISTRATOR, Console::Yes },
         { "sentiment",   ollamaSentimentCommandTable },
-        { "personality", ollamaPersonalityCommandTable }
+        { "personality", ollamaPersonalityCommandTable },
+        { "memory",      ollamaMemoryCommandTable }
     };
 
     static ChatCommandTable commandTable =
@@ -49,6 +80,11 @@ ChatCommandTable OllamaChatConfigCommand::GetCommands() const
 
 bool OllamaChatConfigCommand::HandleOllamaReloadCommand(ChatHandler* handler)
 {
+    if (g_EnableMemory)
+        SaveBotMemoryToDB(true);
+    if (!g_EnableMemory)
+        SaveBotConversationHistoryToDB();
+
     sConfigMgr->Reload();
     LoadOllamaChatConfig();
 
@@ -60,8 +96,13 @@ bool OllamaChatConfigCommand::HandleOllamaReloadCommand(ChatHandler* handler)
     }
 
     LoadBotPersonalityList();
-    LoadBotConversationHistoryFromDB();
+    if (!g_EnableMemory)
+        LoadBotConversationHistoryFromDB();
+    else
+        SaveBotMemoryToDB(true);
     InitializeSentimentTracking();
+    InitializeBotMemory();
+    ReloadOllamaRAGSystem();
     handler->SendSysMessage("OllamaChat: Configuration reloaded from conf!");
     return true;
 }
@@ -414,5 +455,113 @@ bool OllamaChatConfigCommand::HandleOllamaPersonalityListCommand(ChatHandler* ha
         handler->SendSysMessage(fmt::format("    {}", prompt));
     }
     
+    return true;
+}
+
+bool OllamaChatConfigCommand::HandleOllamaMemoryViewCommand(ChatHandler* handler, Optional<std::string> botName, Optional<std::string> playerName)
+{
+    if (!g_EnableMemory)
+    {
+        handler->SendSysMessage("OllamaChat: Memory disabled.");
+        return true;
+    }
+
+    uint64_t botGuid = ResolveMemoryGuidArg(botName);
+    uint64_t playerGuid = ResolveMemoryGuidArg(playerName);
+    if (botName && !botGuid)
+    {
+        handler->SendSysMessage(fmt::format("OllamaChat: Bot '{}' not found.", *botName));
+        return true;
+    }
+    if (playerName && !playerGuid)
+    {
+        handler->SendSysMessage(fmt::format("OllamaChat: Player '{}' not found.", *playerName));
+        return true;
+    }
+
+    if (botGuid && playerGuid)
+    {
+        handler->SendSysMessage(GetMemoryDebugInfo(botGuid, playerGuid));
+        return true;
+    }
+
+    auto pairs = CollectMemoryPairs(botGuid, playerGuid);
+    if (pairs.empty())
+    {
+        handler->SendSysMessage("OllamaChat: No memory data.");
+        return true;
+    }
+
+    for (auto const& [bg, pg] : pairs)
+    {
+        Player* bot = ObjectAccessor::FindPlayer(ObjectGuid(bg));
+        std::string playerLabel = GetStoredPlayerName(bg, pg);
+        if (playerLabel.empty())
+            playerLabel = std::to_string(pg);
+        handler->SendSysMessage(fmt::format("  {} -> {} pending={}",
+            bot ? bot->GetName() : std::to_string(bg), playerLabel, GetPendingTurnCount(bg, pg)));
+    }
+    return true;
+}
+
+bool OllamaChatConfigCommand::HandleOllamaMemoryResetCommand(ChatHandler* handler, Optional<std::string> botName, Optional<std::string> playerName)
+{
+    if (!g_EnableMemory)
+    {
+        handler->SendSysMessage("OllamaChat: Memory disabled.");
+        return true;
+    }
+
+    uint64_t bg = ResolveMemoryGuidArg(botName);
+    uint64_t pg = ResolveMemoryGuidArg(playerName);
+    if (botName && bg == 0)
+    {
+        handler->SendSysMessage(fmt::format("OllamaChat: Bot '{}' not found.", *botName));
+        return true;
+    }
+    if (playerName && pg == 0)
+    {
+        handler->SendSysMessage(fmt::format("OllamaChat: Player '{}' not found.", *playerName));
+        return true;
+    }
+
+    ResetBotMemory(bg, pg);
+    handler->SendSysMessage("OllamaChat: Memory reset.");
+    return true;
+}
+
+bool OllamaChatConfigCommand::HandleOllamaMemoryCompactCommand(ChatHandler* handler, Optional<std::string> botName, Optional<std::string> playerName)
+{
+    if (!g_EnableMemory)
+    {
+        handler->SendSysMessage("OllamaChat: Memory disabled.");
+        return true;
+    }
+    if (!botName || !playerName)
+    {
+        handler->SendSysMessage("OllamaChat: Usage: .ollama memory compact <bot> <player>");
+        return true;
+    }
+
+    uint64_t botGuid = ResolveMemoryGuidArg(botName);
+    uint64_t playerGuid = ResolveMemoryGuidArg(playerName);
+    if (botGuid == 0 || playerGuid == 0)
+    {
+        handler->SendSysMessage("OllamaChat: Bot or player not found.");
+        return true;
+    }
+
+    switch (EnqueueMemoryCompaction(botGuid, playerGuid, true))
+    {
+        case MemoryCompactionEnqueueResult::Enqueued:
+            handler->SendSysMessage("OllamaChat: Compaction queued.");
+            break;
+        case MemoryCompactionEnqueueResult::AlreadyPending:
+            handler->SendSysMessage("OllamaChat: Compaction already queued.");
+            break;
+        default:
+            handler->SendSysMessage("OllamaChat: Nothing to compact.");
+            break;
+    }
     return true;
 }

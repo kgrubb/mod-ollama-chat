@@ -103,5 +103,33 @@
     "content": "PvP offers various rewards beyond gear. Titles, mounts, achievements, special tabards. Seasonal rewards for top performers. Unique PvP items and cosmetics. Rewards motivate participation and competition. Some rewards are very rare and prestigious. PvP rewards system encourages continued engagement and improvement.",
     "keywords": ["pvp rewards", "titles", "mounts", "achievements", "seasonal", "prestigious", "offers various rewards", "beyond gear", "special tabards", "seasonal rewards", "top performers", "unique pvp items", "cosmetics", "rewards motivate", "participation", "competition", "very rare", "pvp rewards system", "encourages continued", "engagement", "improvement"],
     "tags": ["pvp", "rewards", "incentives", "motivation"]
+  },
+  {
+    "id": "pvp_wintergrasp",
+    "title": "Wintergrasp PvP",
+    "content": "Wintergrasp is large-scale outdoor PvP in Northrend every few hours. Teams fight for control of the fortress using siege vehicles and destructible walls. Winners access Vault of Archavon raid. Tenacity buff helps underpopulated faction. Queued from Dalaran in later patches.",
+    "keywords": ["wintergrasp", "pvp", "siege", "vault of archavon", "tenacity", "northrend", "fortress"],
+    "tags": ["pvp", "world", "wrath", "northrend"]
+  },
+  {
+    "id": "pvp_strand_of_ancients",
+    "title": "Strand of the Ancients",
+    "content": "Strand of the Ancients is a Wrath battleground featuring attacker vs defender rounds. Attackers use siege vehicles to destroy walls and capture relics; defenders delay the assault. Added in patch 3.2 alongside the Argent Tournament.",
+    "keywords": ["strand of the ancients", "sota", "battleground", "siege", "vehicles", "relic"],
+    "tags": ["pvp", "battlegrounds", "wrath"]
+  },
+  {
+    "id": "pvp_isle_of_conquest",
+    "title": "Isle of Conquest",
+    "content": "Isle of Conquest is a large battleground added in patch 3.2 with vehicles, workshops, and a central keep. Teams capture bases to build siege engines and assault the enemy gate. Combines AV scale with vehicle mechanics.",
+    "keywords": ["isle of conquest", "ioc", "battleground", "vehicles", "siege", "workshop"],
+    "tags": ["pvp", "battlegrounds", "wrath"]
+  },
+  {
+    "id": "pvp_wrath_arena_seasons",
+    "title": "Wrath Arena Seasons",
+    "content": "Wrath had multiple arena seasons with new gear tiers. Season 5-8 gear progressed from Naxx-level through Ulduar, ToC, and ICC stat budgets. Deadly Gladiator's and Wrathful Gladiator's sets were top PvP gear. Arena points and rating determine rewards.",
+    "keywords": ["arena", "season 5", "season 6", "season 7", "season 8", "gladiator", "rating", "wrath"],
+    "tags": ["pvp", "arena", "wrath", "gear"]
   }
 ]

@@ -58,8 +58,8 @@
   {
     "id": "mechanic_pets",
     "title": "Pet System",
-    "content": "Pets are companions that follow players and assist in combat. Hunters can tame wild beasts as pets, while other classes can obtain pets through quests or purchases. Pets can be customized with names, appearances, and abilities. Some pets provide combat bonuses, while others are purely cosmetic. The pet battle system allows players to collect and battle with pets in a turn-based mini-game. Pets add personality and utility to characters.",
-    "keywords": ["pets", "companions", "hunters", "tame", "pet battles", "cosmetic", "follow players", "assist in combat", "wild beasts", "obtain through quests", "purchases", "customized", "names", "appearances", "abilities", "combat bonuses", "collect", "battle", "turn based", "mini game", "personality", "utility", "characters"],
+    "content": "Hunter pets and warlock demons are combat companions with unique abilities. Hunters tame beasts from the wild and manage pet happiness, loyalty, and talent trees. Vanity non-combat pets (mini companions) can be collected from achievements, vendors, and rare drops. Non-combat pets follow the player cosmetically without affecting combat.",
+    "keywords": ["pets", "hunters", "tame", "warlock", "demons", "vanity pets", "companions", "cosmetic", "pet happiness"],
     "tags": ["mechanic", "companions", "pets", "collection"]
   },
   {
@@ -93,8 +93,85 @@
   {
     "id": "mechanic_currency",
     "title": "Currency Systems",
-    "content": "World of Warcraft has multiple currency systems beyond gold. Honor points for PvP gear, arena points for rated gear, justice points for dungeon/raid gear, valor points for heroic gear, and various tokens for specific reputations. Emblems of various colors provide raid gear. Different currencies serve different purposes and are earned through specific activities. Managing multiple currencies is important for gearing up characters efficiently.",
-    "keywords": ["currency", "honor", "arena points", "justice points", "valor points", "emblems", "gold", "pvp gear", "rated gear", "dungeon raid gear", "heroic gear", "tokens", "specific reputations", "various colors", "raid gear", "different purposes", "earned through", "specific activities", "managing", "gearing up", "characters", "efficiently"],
+    "content": "Wrath currencies include gold, honor points (PvP), arena points (rated PvP), and emblems (Heroism, Valor, Conquest, Triumph, Frost) for PvE gear. Faction reputation unlocks head enchants and recipes. Wintergrasp marks and Champion's Seals from the Argent Tournament are special currencies.",
+    "keywords": ["currency", "honor", "arena points", "emblems", "heroism", "triumph", "frost", "gold", "argent tournament", "wintergrasp"],
     "tags": ["mechanic", "currency", "gearing", "progression"]
+  },
+  {
+    "id": "mechanic_dual_spec",
+    "title": "Dual Talent Specialization",
+    "content": "Dual spec allows players at level 40 to purchase a second talent build from their class trainer for 10 gold. Switching specs requires being out of combat near an inn or city. Essential for carrying separate PvE and PvP or tank/healer/DPS builds.",
+    "keywords": ["dual spec", "talent", "specialization", "respec", "pvp", "pve", "switch"],
+    "tags": ["mechanic", "character", "wrath", "talents"]
+  },
+  {
+    "id": "mechanic_lfg",
+    "title": "Dungeon Finder",
+    "content": "The Dungeon Finder (LFG) added in Wrath lets players queue for dungeons from anywhere. Random daily heroic grants emblem rewards. The system forms groups automatically and teleports players to the instance. Role selection (tank/healer/DPS) speeds queue times.",
+    "keywords": ["dungeon finder", "lfg", "random heroic", "daily", "queue", "emblem", "teleport"],
+    "tags": ["mechanic", "instances", "wrath", "group_content"]
+  },
+  {
+    "id": "mechanic_cold_weather_flying",
+    "title": "Cold Weather Flying",
+    "content": "Cold Weather Flying is required to use flying mounts in Northrend. Alliance and Horde players learn it at level 77 for 1000 gold from trainers in Dalaran or faction capitals. Without it, players must use ground mounts across Northrend.",
+    "keywords": ["cold weather flying", "northrend", "flying mount", "dalaran", "level 77", "1000 gold"],
+    "tags": ["mechanic", "travel", "northrend", "wrath"]
+  },
+  {
+    "id": "mechanic_emblems",
+    "title": "Emblem System",
+    "content": "Wrath uses emblems as dungeon and raid currency. Emblems of Heroism drop from heroics and lower raids; Valor from higher content; Conquest and Triumph from Ulduar/ToC era; Frost from ICC daily and heroics in 3.3. Emblems buy tier pieces and ilvl gear from vendors in Dalaran.",
+    "keywords": ["emblems", "heroism", "valor", "conquest", "triumph", "frost", "currency", "tier", "dalaran", "gearing"],
+    "tags": ["mechanic", "currency", "wrath", "gearing"]
+  },
+  {
+    "id": "mechanic_phasing",
+    "title": "Quest Phasing",
+    "content": "Phasing lets different players see different versions of the world based on quest progress. Introduced heavily in Wrath for story moments like the Wrathgate, Death Knight starting zone, and Icecrown progression. NPCs and objects appear or disappear per player phase.",
+    "keywords": ["phasing", "quest", "wrathgate", "death knight", "story", "zone"],
+    "tags": ["mechanic", "quests", "wrath", "story"]
+  },
+  {
+    "id": "mechanic_vehicles",
+    "title": "Vehicle Combat",
+    "content": "Wrath expanded vehicle combat where players control siege engines, drakes, jousting mounts, and boss vehicles. Wintergrasp siege tanks, Oculus drakes, and ICC gunship battle use vehicle UI. Abilities replace normal action bars while mounted.",
+    "keywords": ["vehicles", "siege", "wintergrasp", "oculus", "gunship", "jousting", "drake"],
+    "tags": ["mechanic", "combat", "wrath", "instances"]
+  },
+  {
+    "id": "mechanic_championing",
+    "title": "Faction Championing",
+    "content": "Wearing a tabard in a level 80 heroic or raid causes reputation gains for that faction instead of the default Kirin Tor. Used to grind Argent Crusade, Wyrmrest Accord, and other Northrend factions while doing emblems.",
+    "keywords": ["championing", "tabard", "reputation", "heroic", "kirin tor", "argent crusade", "wyrmrest"],
+    "tags": ["mechanic", "reputation", "wrath", "instances"]
+  },
+  {
+    "id": "mechanic_runes",
+    "title": "Death Knight Rune System",
+    "content": "Death Knights use six runes (two blood, two frost, two unholy) that regenerate over time plus runic power generated by spending runes. Abilities cost specific rune types. The rune system defines DK rotation and resource management.",
+    "keywords": ["death knight", "runes", "runic power", "blood", "frost", "unholy", "resource"],
+    "tags": ["mechanic", "death_knight", "wrath", "combat"]
+  },
+  {
+    "id": "mechanic_achievements_wrath",
+    "title": "Wrath Achievements",
+    "content": "The achievement system launched in Wrath tracks exploration, dungeons, raids, PvP, and meta-goals. Notable examples: Loremaster, Explorer, Glory of the Hero/Ulduar Raider, Immortal/Selfless titles from raid achievements. Points unlock tabards and mounts.",
+    "keywords": ["achievements", "glory of the hero", "loremaster", "explorer", "meta", "titles", "points"],
+    "tags": ["mechanic", "achievements", "wrath", "goals"]
+  },
+  {
+    "id": "mechanic_arena_seasons",
+    "title": "Arena and PvP Seasons",
+    "content": "Wrath PvP progresses through arena seasons with new gear each tier. Honor points buy entry PvP gear; arena rating unlocks higher tiers. Resilience reduces damage from players. Wintergrasp and battlegrounds supplement honor farming.",
+    "keywords": ["arena season", "resilience", "honor", "rating", "pvp gear", "wrath"],
+    "tags": ["mechanic", "pvp", "wrath"]
+  },
+  {
+    "id": "mechanic_bind_on_pickup",
+    "title": "Item Binding",
+    "content": "Items can be bind on pickup (BoP), bind on equip (BoE), or bind to account (not in Wrath). BoP items cannot be traded once looted. BoE crafted gear can be sold on the auction house. Loot rules in raids use need/greed or master looter.",
+    "keywords": ["bind on pickup", "bop", "boe", "loot", "trade", "auction house"],
+    "tags": ["mechanic", "items", "economy"]
   }
 ]

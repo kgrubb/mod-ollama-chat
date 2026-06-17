@@ -32,30 +32,22 @@ Covers character classes and faction information:
 - Racial abilities and faction-specific content
 
 ### wow_zones.json
-Comprehensive zone information including:
-- Starting zones for both factions
-- Level-appropriate leveling zones
-- Major cities and hubs
-- Key locations, NPCs, and activities
-- Zone themes and storylines
+Starting zones, classic and Northrend leveling zones, and major cities.
+
+### wow_outland.json
+Outland zones (TBC, level 58-70).
 
 ### wow_dungeons_raids.json
-Detailed dungeon and raid content:
-- Classic dungeons (13-60 level range)
-- Major raids (Molten Core, Blackwing Lair, Ahn'Qiraj, Naxxramas)
-- Boss encounters and strategies
-- Loot tables and rewards
-- Difficulty levels and requirements
+Classic, TBC, and Wrath dungeons and raids.
+
+### wow_quest_pois.json
+Quest locations, zone/subzone landmarks, and dungeon entrances for location-aware RAG ("where is…?" queries).
+
+### wow_quest_npcs.json
+Quest-giver NPCs by zone (from world DB export). Tune or omit this file separately if NPC hits crowd out location results.
 
 ### wow_mechanics.json
-Core game systems and mechanics:
-- Reputation system and faction standing
-- Auction House and economy
-- Quest system and progression
-- Talent trees and specialization
-- Glyphs, achievements, mounts, pets
-- Guilds, instances, world events
-- Profession specializations and currencies
+Core game systems; includes Wrath additions (dual spec, LFG, emblems, cold weather flying).
 
 ### wow_items_equipment.json
 Equipment and item information:
@@ -134,13 +126,20 @@ Edit existing JSON files to update information, add new entries, or correct inac
 - Focus on Wrath of the Lich King content specifically
 - Maintain consistent formatting and structure
 
+## Regenerating the corpus
+
+Edit JSON files directly or rebuild `wow_quest_pois.json` and `wow_quest_npcs.json` from world DB locally. Commit JSON only, not builder tools.
+
 ## Configuration
 
-The RAG system is controlled by configuration options in `mod_ollama_chat.conf.dist`:
-- `RAG.Enable`: Enable/disable the RAG system
-- `RAG.DataPath`: Path to the data directory (default: "modules/mod-ollama-chat/data/rag/")
-- `RAG.SimilarityThreshold`: Minimum similarity score for information retrieval
-- `RAG.MaxResults`: Maximum number of relevant entries to include in prompts
+The RAG system is controlled in `mod_ollama_chat.conf`:
+- `OllamaChat.EnableRAG`
+- `OllamaChat.RAGDataPath`
+- `OllamaChat.RAGSimilarityThreshold` (default 0.3)
+- `OllamaChat.RAGMaxRetrievedItems` (default 3)
+- `OllamaChat.RAGPromptTemplate`
+
+When `OllamaChat.ChatPromptTemplate` is empty, the optional prompt composer also supports `OllamaChat.RAGKnowledgeChance` and related zone/home/level modifiers.
 
 ## Examples
 

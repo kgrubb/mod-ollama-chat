@@ -3,9 +3,34 @@
 #include "PlayerbotMgr.h"
 #include "Log.h"
 #include "mod-ollama-chat_config.h"
+#include "mod-ollama-chat_handler.h"
 #include "DatabaseEnv.h"
 #include <random>
 #include <vector>
+
+namespace
+{
+char const* kGeneralCasualPrompt =
+    "Casual Wrath zone chat: first person, abbreviations OK, never wiki-tone or narration.";
+
+bool IsHeavyRpPersonality(std::string const& key)
+{
+    static char const* kHeavy[] = {"ANCIENT_WISE_ONE", "BARD", "MENTOR", "ROLEPLAYER", "SCHOLAR"};
+    for (char const* heavy : kHeavy)
+    {
+        if (key == heavy)
+            return true;
+    }
+    return false;
+}
+} // namespace
+
+std::string GetPersonalityPromptForChannel(const std::string& type, ChatChannelSourceLocal channel)
+{
+    if (channel == SRC_GENERAL_LOCAL && IsHeavyRpPersonality(type))
+        return kGeneralCasualPrompt;
+    return GetPersonalityPromptAddition(type);
+}
 
 // Internal personality map
 std::string GetBotPersonality(Player* bot)
@@ -57,6 +82,9 @@ std::string GetBotPersonality(Player* bot)
     }
 
     // Otherwise, assign randomly from config (only from non-manual personalities)
+    if (g_PersonalityKeysRandomOnly.empty())
+        return "default";
+
     uint32 newIdx = urand(0, g_PersonalityKeysRandomOnly.size() - 1);
     std::string chosenPersonality = g_PersonalityKeysRandomOnly[newIdx];
     g_BotPersonalityList[botGuid] = chosenPersonality;

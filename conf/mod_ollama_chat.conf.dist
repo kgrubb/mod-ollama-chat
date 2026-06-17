@@ -43,7 +43,8 @@ OllamaChat.Url = http://localhost:11434/api/generate
 #     Default:     llama3.2:1b
 OllamaChat.Model = llama3.2:1b
 
-# OllamaChat.ApiKey — optional Bearer token for OllamaChat.Url
+# OllamaChat.ApiKey
+#     Description: Optional Bearer token for OllamaChat.Url.
 #     Default:     (empty)
 OllamaChat.ApiKey =
 
@@ -908,3 +909,43 @@ OllamaChat.RAGSimilarityThreshold = 0.3
 #     Description: Template for including RAG information in bot prompts.
 #     Placeholders (named): {rag_info}
 OllamaChat.RAGPromptTemplate = "RELEVANT INFORMATION:\n{rag_info}\nUse this information to provide accurate and detailed responses when applicable."
+
+# --------------------------------------------
+# BOT-PLAYER MEMORY
+# --------------------------------------------
+
+# OllamaChat.EnableMemory
+#     Description: Enable long-term bot-player memory in prompts.
+#     Default: 0 (false)
+OllamaChat.EnableMemory = 0
+
+# OllamaChat.PersistEpisodicMemory
+#     Description: Persist memory turns to the database.
+#     Default: 1 (true)
+OllamaChat.PersistEpisodicMemory = 1
+
+# OllamaChat.MemoryCompactionPrompt
+#     Description: LLM prompt for memory compaction. Empty uses built-in default.
+OllamaChat.MemoryCompactionPrompt =
+
+# --------------------------------------------
+# PROMPT COMPOSER
+# --------------------------------------------
+
+# OllamaChat.PromptDataPath
+#     Description: Directory for system.txt, chat_task.txt, and section snippets.
+#     Default: ../../../modules/mod-ollama-chat/data/prompts/
+OllamaChat.PromptDataPath = ../../../modules/mod-ollama-chat/data/prompts/
+
+# OllamaChat.SystemPromptOverride
+#     Description: Replaces loaded system.txt when set.
+OllamaChat.SystemPromptOverride =
+
+# OllamaChat.RAGKnowledgeChance
+#     Description: Base percent (0-100) for composer-mode lore retrieval.
+#     Default: 65
+OllamaChat.RAGKnowledgeChance = 65
+
+OllamaChat.RAGKnowledgeZoneBonus = 20
+OllamaChat.RAGKnowledgeHomeZoneBonus = 15
+OllamaChat.RAGKnowledgeLowLevelPenalty = 25

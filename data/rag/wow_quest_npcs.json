@@ -1,0 +1,1430 @@
+[
+  {
+    "id": "npc_10307_618",
+    "title": "Witch Doctor Mau'ari (Winterspring)",
+    "content": "Quest giver in Winterspring. 9 quests.",
+    "keywords": ["witch doctor mau'ari", "winterspring"],
+    "tags": ["npc", "winterspring", "zone:winterspring", "quest"]
+  },
+  {
+    "id": "npc_10321_15",
+    "title": "Emberstrife (Dustwallow Marsh)",
+    "content": "Quest giver in Dustwallow Marsh. 5 quests.",
+    "keywords": ["emberstrife", "dustwallow marsh"],
+    "tags": ["npc", "dustwallow marsh", "zone:dustwallow marsh", "quest"]
+  },
+  {
+    "id": "npc_10837_28",
+    "title": "High Executor Derrington (Western Plaguelands)",
+    "content": "Quest giver in Western Plaguelands. 6 quests.",
+    "keywords": ["high executor derrington", "western plaguelands"],
+    "tags": ["npc", "western plaguelands", "zone:western plaguelands", "quest"]
+  },
+  {
+    "id": "npc_10838_28",
+    "title": "Commander Ashlam Valorfist (Western Plaguelands)",
+    "content": "Quest giver in Western Plaguelands. 6 quests.",
+    "keywords": ["commander ashlam valorfist", "western plaguelands"],
+    "tags": ["npc", "western plaguelands", "zone:western plaguelands", "quest"]
+  },
+  {
+    "id": "npc_10922_361",
+    "title": "Greta Mosshoof (Felwood)",
+    "content": "Quest giver in Felwood. 5 quests.",
+    "keywords": ["greta mosshoof", "felwood"],
+    "tags": ["npc", "felwood", "zone:felwood", "quest"]
+  },
+  {
+    "id": "npc_11039_139",
+    "title": "Duke Nicholas Zverenhoff (Eastern Plaguelands)",
+    "content": "Quest giver in Eastern Plaguelands. 5 quests.",
+    "keywords": ["duke nicholas zverenhoff", "eastern plaguelands"],
+    "tags": ["npc", "eastern plaguelands", "zone:eastern plaguelands", "quest"]
+  },
+  {
+    "id": "npc_11063_139",
+    "title": "Carlin Redpath (Eastern Plaguelands)",
+    "content": "Quest giver in Eastern Plaguelands. 5 quests.",
+    "keywords": ["carlin redpath", "eastern plaguelands"],
+    "tags": ["npc", "eastern plaguelands", "zone:eastern plaguelands", "quest"]
+  },
+  {
+    "id": "npc_11536_139",
+    "title": "Quartermaster Miranda Breechlock (Eastern Plaguelands)",
+    "content": "Quest giver in Eastern Plaguelands. 10 quests.",
+    "keywords": ["quartermaster miranda breechlock", "eastern plaguelands"],
+    "tags": ["npc", "eastern plaguelands", "zone:eastern plaguelands", "quest"]
+  },
+  {
+    "id": "npc_11811_440",
+    "title": "Narain Soothfancy (Tanaris)",
+    "content": "Quest giver in Tanaris. 7 quests.",
+    "keywords": ["narain soothfancy", "tanaris"],
+    "tags": ["npc", "tanaris", "zone:tanaris", "quest"]
+  },
+  {
+    "id": "npc_11878_139",
+    "title": "Nathanos Blightcaller (Eastern Plaguelands)",
+    "content": "Quest giver in Eastern Plaguelands. 9 quests.",
+    "keywords": ["nathanos blightcaller", "eastern plaguelands"],
+    "tags": ["npc", "eastern plaguelands", "zone:eastern plaguelands", "quest"]
+  },
+  {
+    "id": "npc_12944_2717",
+    "title": "Lokhtos Darkbargainer (Molten Core)",
+    "content": "Quest giver in Molten Core. 5 quests.",
+    "keywords": ["lokhtos darkbargainer", "molten core"],
+    "tags": ["npc", "molten core", "zone:molten core", "quest"]
+  },
+  {
+    "id": "npc_13278_16",
+    "title": "Duke Hydraxis (Azshara)",
+    "content": "Quest giver in Azshara. 6 quests.",
+    "keywords": ["duke hydraxis", "azshara"],
+    "tags": ["npc", "azshara", "zone:azshara", "quest"]
+  },
+  {
+    "id": "npc_13840_2597",
+    "title": "Warmaster Laggrond (Alterac Valley)",
+    "content": "Quest giver in Alterac Valley. 8 quests.",
+    "keywords": ["warmaster laggrond", "alterac valley"],
+    "tags": ["npc", "alterac valley", "zone:alterac valley", "quest"]
+  },
+  {
+    "id": "npc_13841_2597",
+    "title": "Lieutenant Haggerdin (Alterac Valley)",
+    "content": "Quest giver in Alterac Valley. 8 quests.",
+    "keywords": ["lieutenant haggerdin", "alterac valley"],
+    "tags": ["npc", "alterac valley", "zone:alterac valley", "quest"]
+  },
+  {
+    "id": "npc_14624_51",
+    "title": "Master Smith Burninate (Searing Gorge)",
+    "content": "Quest giver in Searing Gorge. 6 quests.",
+    "keywords": ["master smith burninate", "searing gorge"],
+    "tags": ["npc", "searing gorge", "zone:searing gorge", "quest"]
+  },
+  {
+    "id": "npc_14722_1519",
+    "title": "Clavicus Knavingham (Stormwind City)",
+    "content": "Quest giver in Stormwind City. 5 quests.",
+    "keywords": ["clavicus knavingham", "stormwind city"],
+    "tags": ["npc", "stormwind city", "zone:stormwind city", "quest"]
+  },
+  {
+    "id": "npc_14723_1537",
+    "title": "Mistina Steelshield (Ironforge)",
+    "content": "Quest giver in Ironforge. 5 quests.",
+    "keywords": ["mistina steelshield", "ironforge"],
+    "tags": ["npc", "ironforge", "zone:ironforge", "quest"]
+  },
+  {
+    "id": "npc_14724_1537",
+    "title": "Bubulo Acerbus (Ironforge)",
+    "content": "Quest giver in Ironforge. 5 quests.",
+    "keywords": ["bubulo acerbus", "ironforge"],
+    "tags": ["npc", "ironforge", "zone:ironforge", "quest"]
+  },
+  {
+    "id": "npc_14725_1657",
+    "title": "Raedon Duskstriker (Darnassus)",
+    "content": "Quest giver in Darnassus. 5 quests.",
+    "keywords": ["raedon duskstriker", "darnassus"],
+    "tags": ["npc", "darnassus", "zone:darnassus", "quest"]
+  },
+  {
+    "id": "npc_14726_1637",
+    "title": "Rashona Straglash (Orgrimmar)",
+    "content": "Quest giver in Orgrimmar. 5 quests.",
+    "keywords": ["rashona straglash", "orgrimmar"],
+    "tags": ["npc", "orgrimmar", "zone:orgrimmar", "quest"]
+  },
+  {
+    "id": "npc_14727_1637",
+    "title": "Vehena (Orgrimmar)",
+    "content": "Quest giver in Orgrimmar. 5 quests.",
+    "keywords": ["vehena", "orgrimmar"],
+    "tags": ["npc", "orgrimmar", "zone:orgrimmar", "quest"]
+  },
+  {
+    "id": "npc_14728_1638",
+    "title": "Rumstag Proudstrider (Thunder Bluff)",
+    "content": "Quest giver in Thunder Bluff. 5 quests.",
+    "keywords": ["rumstag proudstrider", "thunder bluff"],
+    "tags": ["npc", "thunder bluff", "zone:thunder bluff", "quest"]
+  },
+  {
+    "id": "npc_14729_1497",
+    "title": "Ralston Farnsley (Undercity)",
+    "content": "Quest giver in Undercity. 5 quests.",
+    "keywords": ["ralston farnsley", "undercity"],
+    "tags": ["npc", "undercity", "zone:undercity", "quest"]
+  },
+  {
+    "id": "npc_14902_19",
+    "title": "Jin'rokh the Breaker (Stranglethorn Vale)",
+    "content": "Quest giver in Stranglethorn Vale. 6 quests.",
+    "keywords": ["jin'rokh the breaker", "stranglethorn vale"],
+    "tags": ["npc", "stranglethorn vale", "zone:stranglethorn vale", "quest"]
+  },
+  {
+    "id": "npc_14902_1977",
+    "title": "Jin'rokh the Breaker (Zul'Gurub)",
+    "content": "Quest giver in Zul'Gurub. 8 quests.",
+    "keywords": ["jin'rokh the breaker", "zul'gurub"],
+    "tags": ["npc", "zul'gurub", "zone:zul'gurub", "quest"]
+  },
+  {
+    "id": "npc_14903_19",
+    "title": "Al'tabim the All-Seeing (Stranglethorn Vale)",
+    "content": "Quest giver in Stranglethorn Vale. 9 quests.",
+    "keywords": ["al'tabim the all-seeing", "stranglethorn vale"],
+    "tags": ["npc", "stranglethorn vale", "zone:stranglethorn vale", "quest"]
+  },
+  {
+    "id": "npc_14903_1977",
+    "title": "Al'tabim the All-Seeing (Zul'Gurub)",
+    "content": "Quest giver in Zul'Gurub. 12 quests.",
+    "keywords": ["al'tabim the all-seeing", "zul'gurub"],
+    "tags": ["npc", "zul'gurub", "zone:zul'gurub", "quest"]
+  },
+  {
+    "id": "npc_14904_19",
+    "title": "Maywiki of Zuldazar (Stranglethorn Vale)",
+    "content": "Quest giver in Stranglethorn Vale. 6 quests.",
+    "keywords": ["maywiki of zuldazar", "stranglethorn vale"],
+    "tags": ["npc", "stranglethorn vale", "zone:stranglethorn vale", "quest"]
+  },
+  {
+    "id": "npc_14904_1977",
+    "title": "Maywiki of Zuldazar (Zul'Gurub)",
+    "content": "Quest giver in Zul'Gurub. 8 quests.",
+    "keywords": ["maywiki of zuldazar", "zul'gurub"],
+    "tags": ["npc", "zul'gurub", "zone:zul'gurub", "quest"]
+  },
+  {
+    "id": "npc_14905_19",
+    "title": "Falthir the Sightless (Stranglethorn Vale)",
+    "content": "Quest giver in Stranglethorn Vale. 6 quests.",
+    "keywords": ["falthir the sightless", "stranglethorn vale"],
+    "tags": ["npc", "stranglethorn vale", "zone:stranglethorn vale", "quest"]
+  },
+  {
+    "id": "npc_14905_1977",
+    "title": "Falthir the Sightless (Zul'Gurub)",
+    "content": "Quest giver in Zul'Gurub. 8 quests.",
+    "keywords": ["falthir the sightless", "zul'gurub"],
+    "tags": ["npc", "zul'gurub", "zone:zul'gurub", "quest"]
+  },
+  {
+    "id": "npc_14983_3358",
+    "title": "Field Marshal Oslight (Arathi Basin)",
+    "content": "Quest giver in Arathi Basin. 6 quests.",
+    "keywords": ["field marshal oslight", "arathi basin"],
+    "tags": ["npc", "arathi basin", "zone:arathi basin", "quest"]
+  },
+  {
+    "id": "npc_14984_3358",
+    "title": "Sergeant Maclear (Arathi Basin)",
+    "content": "Quest giver in Arathi Basin. 5 quests.",
+    "keywords": ["sergeant maclear", "arathi basin"],
+    "tags": ["npc", "arathi basin", "zone:arathi basin", "quest"]
+  },
+  {
+    "id": "npc_15021_3358",
+    "title": "Deathmaster Dwire (Arathi Basin)",
+    "content": "Quest giver in Arathi Basin. 6 quests.",
+    "keywords": ["deathmaster dwire", "arathi basin"],
+    "tags": ["npc", "arathi basin", "zone:arathi basin", "quest"]
+  },
+  {
+    "id": "npc_15022_3358",
+    "title": "Deathstalker Mortis (Arathi Basin)",
+    "content": "Quest giver in Arathi Basin. 5 quests.",
+    "keywords": ["deathstalker mortis", "arathi basin"],
+    "tags": ["npc", "arathi basin", "zone:arathi basin", "quest"]
+  },
+  {
+    "id": "npc_15042_1977",
+    "title": "Zanza the Restless (Zul'Gurub)",
+    "content": "Quest giver in Zul'Gurub. 12 quests.",
+    "keywords": ["zanza the restless", "zul'gurub"],
+    "tags": ["npc", "zul'gurub", "zone:zul'gurub", "quest"]
+  },
+  {
+    "id": "npc_15183_1377",
+    "title": "Geologist Larksbane (Silithus)",
+    "content": "Quest giver in Silithus. 11 quests.",
+    "keywords": ["geologist larksbane", "silithus"],
+    "tags": ["npc", "silithus", "zone:silithus", "quest"]
+  },
+  {
+    "id": "npc_1518_85",
+    "title": "Apothecary Johaan (Tirisfal Glades)",
+    "content": "Quest giver in Tirisfal Glades. 6 quests.",
+    "keywords": ["apothecary johaan", "tirisfal glades"],
+    "tags": ["npc", "tirisfal glades", "zone:tirisfal glades", "quest"]
+  },
+  {
+    "id": "npc_15192_440",
+    "title": "Anachronos (Tanaris)",
+    "content": "Quest giver in Tanaris. 20 quests.",
+    "keywords": ["anachronos", "tanaris"],
+    "tags": ["npc", "tanaris", "zone:tanaris", "quest"]
+  },
+  {
+    "id": "npc_15282_1377",
+    "title": "Aurel Goldleaf (Silithus)",
+    "content": "Quest giver in Silithus. 7 quests.",
+    "keywords": ["aurel goldleaf", "silithus"],
+    "tags": ["npc", "silithus", "zone:silithus", "quest"]
+  },
+  {
+    "id": "npc_15306_1377",
+    "title": "Bor Wildmane (Silithus)",
+    "content": "Quest giver in Silithus. 8 quests.",
+    "keywords": ["bor wildmane", "silithus"],
+    "tags": ["npc", "silithus", "zone:silithus", "quest"]
+  },
+  {
+    "id": "npc_15498_3428",
+    "title": "Windcaller Yessendra (Ahn'Qiraj)",
+    "content": "Quest giver in Ahn'Qiraj. 9 quests.",
+    "keywords": ["windcaller yessendra", "ahn'qiraj"],
+    "tags": ["npc", "ahn'qiraj", "zone:ahn'qiraj", "quest"]
+  },
+  {
+    "id": "npc_15499_3428",
+    "title": "Warden Haro (Ahn'Qiraj)",
+    "content": "Quest giver in Ahn'Qiraj. 9 quests.",
+    "keywords": ["warden haro", "ahn'qiraj"],
+    "tags": ["npc", "ahn'qiraj", "zone:ahn'qiraj", "quest"]
+  },
+  {
+    "id": "npc_15500_3428",
+    "title": "Keyl Swiftclaw (Ahn'Qiraj)",
+    "content": "Quest giver in Ahn'Qiraj. 9 quests.",
+    "keywords": ["keyl swiftclaw", "ahn'qiraj"],
+    "tags": ["npc", "ahn'qiraj", "zone:ahn'qiraj", "quest"]
+  },
+  {
+    "id": "npc_15502_3428",
+    "title": "Andorgos (Ahn'Qiraj)",
+    "content": "Quest giver in Ahn'Qiraj. 18 quests.",
+    "keywords": ["andorgos", "ahn'qiraj"],
+    "tags": ["npc", "ahn'qiraj", "zone:ahn'qiraj", "quest"]
+  },
+  {
+    "id": "npc_15503_3428",
+    "title": "Kandrostrasz (Ahn'Qiraj)",
+    "content": "Quest giver in Ahn'Qiraj. 19 quests.",
+    "keywords": ["kandrostrasz", "ahn'qiraj"],
+    "tags": ["npc", "ahn'qiraj", "zone:ahn'qiraj", "quest"]
+  },
+  {
+    "id": "npc_15504_3428",
+    "title": "Vethsera (Ahn'Qiraj)",
+    "content": "Quest giver in Ahn'Qiraj. 9 quests.",
+    "keywords": ["vethsera", "ahn'qiraj"],
+    "tags": ["npc", "ahn'qiraj", "zone:ahn'qiraj", "quest"]
+  },
+  {
+    "id": "npc_16012_1637",
+    "title": "Mokvar (Orgrimmar)",
+    "content": "Quest giver in Orgrimmar. 27 quests.",
+    "keywords": ["mokvar", "orgrimmar"],
+    "tags": ["npc", "orgrimmar", "zone:orgrimmar", "quest"]
+  },
+  {
+    "id": "npc_16013_1537",
+    "title": "Deliana (Ironforge)",
+    "content": "Quest giver in Ironforge. 27 quests.",
+    "keywords": ["deliana", "ironforge"],
+    "tags": ["npc", "ironforge", "zone:ironforge", "quest"]
+  },
+  {
+    "id": "npc_16016_1537",
+    "title": "Anthion Harmon (Ironforge)",
+    "content": "Quest giver in Ironforge. 9 quests.",
+    "keywords": ["anthion harmon", "ironforge"],
+    "tags": ["npc", "ironforge", "zone:ironforge", "quest"]
+  },
+  {
+    "id": "npc_16016_1637",
+    "title": "Anthion Harmon (Orgrimmar)",
+    "content": "Quest giver in Orgrimmar. 9 quests.",
+    "keywords": ["anthion harmon", "orgrimmar"],
+    "tags": ["npc", "orgrimmar", "zone:orgrimmar", "quest"]
+  },
+  {
+    "id": "npc_16033_25",
+    "title": "Bodley (Blackrock Mountain)",
+    "content": "Quest giver in Blackrock Mountain. 10 quests.",
+    "keywords": ["bodley", "blackrock mountain"],
+    "tags": ["npc", "blackrock mountain", "zone:blackrock mountain", "quest"]
+  },
+  {
+    "id": "npc_16116_139",
+    "title": "Archmage Angela Dosantos (Eastern Plaguelands)",
+    "content": "Quest giver in Eastern Plaguelands. 5 quests.",
+    "keywords": ["archmage angela dosantos", "eastern plaguelands"],
+    "tags": ["npc", "eastern plaguelands", "zone:eastern plaguelands", "quest"]
+  },
+  {
+    "id": "npc_16197_3433",
+    "title": "Arcanist Vandril (Ghostlands)",
+    "content": "Quest giver in Ghostlands. 5 quests.",
+    "keywords": ["arcanist vandril", "ghostlands"],
+    "tags": ["npc", "ghostlands", "zone:ghostlands", "quest"]
+  },
+  {
+    "id": "npc_16239_3433",
+    "title": "Magister Kaendris (Ghostlands)",
+    "content": "Quest giver in Ghostlands. 5 quests.",
+    "keywords": ["magister kaendris", "ghostlands"],
+    "tags": ["npc", "ghostlands", "zone:ghostlands", "quest"]
+  },
+  {
+    "id": "npc_16376_3456",
+    "title": "Craftsman Wilhelm (Naxxramas)",
+    "content": "Quest giver in Naxxramas. 13 quests.",
+    "keywords": ["craftsman wilhelm", "naxxramas"],
+    "tags": ["npc", "naxxramas", "zone:naxxramas", "quest"]
+  },
+  {
+    "id": "npc_16796_3483",
+    "title": "Amaan the Wise (Hellfire Peninsula)",
+    "content": "Quest giver in Hellfire Peninsula. 5 quests.",
+    "keywords": ["amaan the wise", "hellfire peninsula"],
+    "tags": ["npc", "hellfire peninsula", "zone:hellfire peninsula", "quest"]
+  },
+  {
+    "id": "npc_16819_3483",
+    "title": "Force Commander Danath Trollbane (Hellfire Peninsula)",
+    "content": "Quest giver in Hellfire Peninsula. 5 quests.",
+    "keywords": ["force commander danath trollbane", "hellfire peninsula"],
+    "tags": ["npc", "hellfire peninsula", "zone:hellfire peninsula", "quest"]
+  },
+  {
+    "id": "npc_17240_3524",
+    "title": "Admiral Odesyus (Azuremyst Isle)",
+    "content": "Quest giver in Azuremyst Isle. 5 quests.",
+    "keywords": ["admiral odesyus", "azuremyst isle"],
+    "tags": ["npc", "azuremyst isle", "zone:azuremyst isle", "quest"]
+  },
+  {
+    "id": "npc_17423_3525",
+    "title": "Harbinger Mikolaas (Bloodmyst Isle)",
+    "content": "Quest giver in Bloodmyst Isle. 5 quests.",
+    "keywords": ["harbinger mikolaas", "bloodmyst isle"],
+    "tags": ["npc", "bloodmyst isle", "zone:bloodmyst isle", "quest"]
+  },
+  {
+    "id": "npc_17613_2562",
+    "title": "Archmage Alturus (Deadwind Pass)",
+    "content": "Quest giver in Deadwind Pass. 5 quests.",
+    "keywords": ["archmage alturus", "deadwind pass"],
+    "tags": ["npc", "deadwind pass", "zone:deadwind pass", "quest"]
+  },
+  {
+    "id": "npc_17684_3525",
+    "title": "Vindicator Boros (Bloodmyst Isle)",
+    "content": "Quest giver in Bloodmyst Isle. 6 quests.",
+    "keywords": ["vindicator boros", "bloodmyst isle"],
+    "tags": ["npc", "bloodmyst isle", "zone:bloodmyst isle", "quest"]
+  },
+  {
+    "id": "npc_17841_3521",
+    "title": "Ysiel Windsinger (Zangarmarsh)",
+    "content": "Quest giver in Zangarmarsh. 5 quests.",
+    "keywords": ["ysiel windsinger", "zangarmarsh"],
+    "tags": ["npc", "zangarmarsh", "zone:zangarmarsh", "quest"]
+  },
+  {
+    "id": "npc_18166_3703",
+    "title": "Khadgar (Shattrath City)",
+    "content": "Quest giver in Shattrath City. 7 quests.",
+    "keywords": ["khadgar", "shattrath city"],
+    "tags": ["npc", "shattrath city", "zone:shattrath city", "quest"]
+  },
+  {
+    "id": "npc_18253_2562",
+    "title": "Archmage Leryda (Deadwind Pass)",
+    "content": "Quest giver in Deadwind Pass. 20 quests.",
+    "keywords": ["archmage leryda", "deadwind pass"],
+    "tags": ["npc", "deadwind pass", "zone:deadwind pass", "quest"]
+  },
+  {
+    "id": "npc_18261_3518",
+    "title": "Lantresor of the Blade (Nagrand)",
+    "content": "Quest giver in Nagrand. 6 quests.",
+    "keywords": ["lantresor of the blade", "nagrand"],
+    "tags": ["npc", "nagrand", "zone:nagrand", "quest"]
+  },
+  {
+    "id": "npc_18265_3518",
+    "title": "Gezhe (Nagrand)",
+    "content": "Quest giver in Nagrand. 8 quests.",
+    "keywords": ["gezhe", "nagrand"],
+    "tags": ["npc", "nagrand", "zone:nagrand", "quest"]
+  },
+  {
+    "id": "npc_18417_3518",
+    "title": "Altruis the Sufferer (Nagrand)",
+    "content": "Quest giver in Nagrand. 9 quests.",
+    "keywords": ["altruis the sufferer", "nagrand"],
+    "tags": ["npc", "nagrand", "zone:nagrand", "quest"]
+  },
+  {
+    "id": "npc_18471_3518",
+    "title": "Gurgthock (Nagrand)",
+    "content": "Quest giver in Nagrand. 6 quests.",
+    "keywords": ["gurgthock", "nagrand"],
+    "tags": ["npc", "nagrand", "zone:nagrand", "quest"]
+  },
+  {
+    "id": "npc_18531_3703",
+    "title": "Magistrix Fyalenn (Shattrath City)",
+    "content": "Quest giver in Shattrath City. 6 quests.",
+    "keywords": ["magistrix fyalenn", "shattrath city"],
+    "tags": ["npc", "shattrath city", "zone:shattrath city", "quest"]
+  },
+  {
+    "id": "npc_18537_3703",
+    "title": "Adyen the Lightwarden (Shattrath City)",
+    "content": "Quest giver in Shattrath City. 6 quests.",
+    "keywords": ["adyen the lightwarden", "shattrath city"],
+    "tags": ["npc", "shattrath city", "zone:shattrath city", "quest"]
+  },
+  {
+    "id": "npc_1855_139",
+    "title": "Tirion Fordring (Eastern Plaguelands)",
+    "content": "Quest giver in Eastern Plaguelands. 7 quests.",
+    "keywords": ["tirion fordring", "eastern plaguelands"],
+    "tags": ["npc", "eastern plaguelands", "zone:eastern plaguelands", "quest"]
+  },
+  {
+    "id": "npc_1937_130",
+    "title": "Apothecary Renferrel (Silverpine Forest)",
+    "content": "Quest giver in Silverpine Forest. 6 quests.",
+    "keywords": ["apothecary renferrel", "silverpine forest"],
+    "tags": ["npc", "silverpine forest", "zone:silverpine forest", "quest"]
+  },
+  {
+    "id": "npc_1938_130",
+    "title": "Dalar Dawnweaver (Silverpine Forest)",
+    "content": "Quest giver in Silverpine Forest. 6 quests.",
+    "keywords": ["dalar dawnweaver", "silverpine forest"],
+    "tags": ["npc", "silverpine forest", "zone:silverpine forest", "quest"]
+  },
+  {
+    "id": "npc_19467_3523",
+    "title": "Anchorite Karja (Netherstorm)",
+    "content": "Quest giver in Netherstorm. 8 quests.",
+    "keywords": ["anchorite karja", "netherstorm"],
+    "tags": ["npc", "netherstorm", "zone:netherstorm", "quest"]
+  },
+  {
+    "id": "npc_19468_3523",
+    "title": "Spymaster Thalodien (Netherstorm)",
+    "content": "Quest giver in Netherstorm. 8 quests.",
+    "keywords": ["spymaster thalodien", "netherstorm"],
+    "tags": ["npc", "netherstorm", "zone:netherstorm", "quest"]
+  },
+  {
+    "id": "npc_19488_3523",
+    "title": "Custodian Dieworth (Netherstorm)",
+    "content": "Quest giver in Netherstorm. 8 quests.",
+    "keywords": ["custodian dieworth", "netherstorm"],
+    "tags": ["npc", "netherstorm", "zone:netherstorm", "quest"]
+  },
+  {
+    "id": "npc_1952_130",
+    "title": "High Executor Hadrec (Silverpine Forest)",
+    "content": "Quest giver in Silverpine Forest. 7 quests.",
+    "keywords": ["high executor hadrec", "silverpine forest"],
+    "tags": ["npc", "silverpine forest", "zone:silverpine forest", "quest"]
+  },
+  {
+    "id": "npc_19935_1941",
+    "title": "Soridormi (Caverns of Time)",
+    "content": "Quest giver in Caverns of Time. 21 quests.",
+    "keywords": ["soridormi", "caverns of time"],
+    "tags": ["npc", "caverns of time", "zone:caverns of time", "quest"]
+  },
+  {
+    "id": "npc_2080_141",
+    "title": "Denalan (Teldrassil)",
+    "content": "Quest giver in Teldrassil. 5 quests.",
+    "keywords": ["denalan", "teldrassil"],
+    "tags": ["npc", "teldrassil", "zone:teldrassil", "quest"]
+  },
+  {
+    "id": "npc_21183_3520",
+    "title": "Oronok Torn-heart (Shadowmoon Valley)",
+    "content": "Quest giver in Shadowmoon Valley. 7 quests.",
+    "keywords": ["oronok torn-heart", "shadowmoon valley"],
+    "tags": ["npc", "shadowmoon valley", "zone:shadowmoon valley", "quest"]
+  },
+  {
+    "id": "npc_2121_130",
+    "title": "Shadow Priest Allister (Silverpine Forest)",
+    "content": "Quest giver in Silverpine Forest. 5 quests.",
+    "keywords": ["shadow priest allister", "silverpine forest"],
+    "tags": ["npc", "silverpine forest", "zone:silverpine forest", "quest"]
+  },
+  {
+    "id": "npc_21293_3520",
+    "title": "Borak, Son of Oronok (Shadowmoon Valley)",
+    "content": "Quest giver in Shadowmoon Valley. 6 quests.",
+    "keywords": ["borak, son of oronok", "shadowmoon valley"],
+    "tags": ["npc", "shadowmoon valley", "zone:shadowmoon valley", "quest"]
+  },
+  {
+    "id": "npc_21357_3520",
+    "title": "Wing Commander Nuainn (Shadowmoon Valley)",
+    "content": "Quest giver in Shadowmoon Valley. 7 quests.",
+    "keywords": ["wing commander nuainn", "shadowmoon valley"],
+    "tags": ["npc", "shadowmoon valley", "zone:shadowmoon valley", "quest"]
+  },
+  {
+    "id": "npc_21359_3520",
+    "title": "Blood Guard Gulmok (Shadowmoon Valley)",
+    "content": "Quest giver in Shadowmoon Valley. 7 quests.",
+    "keywords": ["blood guard gulmok", "shadowmoon valley"],
+    "tags": ["npc", "shadowmoon valley", "zone:shadowmoon valley", "quest"]
+  },
+  {
+    "id": "npc_21465_3520",
+    "title": "David Wayne (Shadowmoon Valley)",
+    "content": "Quest giver in Shadowmoon Valley. 7 quests.",
+    "keywords": ["david wayne", "shadowmoon valley"],
+    "tags": ["npc", "shadowmoon valley", "zone:shadowmoon valley", "quest"]
+  },
+  {
+    "id": "npc_21984_3522",
+    "title": "Rexxar (Blade's Edge Mountains)",
+    "content": "Quest giver in Blade's Edge Mountains. 8 quests.",
+    "keywords": ["rexxar", "blade's edge mountains"],
+    "tags": ["npc", "blade's edge mountains", "zone:blade's edge mountains", "quest"]
+  },
+  {
+    "id": "npc_22103_3522",
+    "title": "Baron Sablemane (Blade's Edge Mountains)",
+    "content": "Quest giver in Blade's Edge Mountains. 8 quests.",
+    "keywords": ["baron sablemane", "blade's edge mountains"],
+    "tags": ["npc", "blade's edge mountains", "zone:blade's edge mountains", "quest"]
+  },
+  {
+    "id": "npc_2215_267",
+    "title": "High Executor Darthalia (Hillsbrad Foothills)",
+    "content": "Quest giver in Hillsbrad Foothills. 7 quests.",
+    "keywords": ["high executor darthalia", "hillsbrad foothills"],
+    "tags": ["npc", "hillsbrad foothills", "zone:hillsbrad foothills", "quest"]
+  },
+  {
+    "id": "npc_2216_267",
+    "title": "Apothecary Lydon (Hillsbrad Foothills)",
+    "content": "Quest giver in Hillsbrad Foothills. 8 quests.",
+    "keywords": ["apothecary lydon", "hillsbrad foothills"],
+    "tags": ["npc", "hillsbrad foothills", "zone:hillsbrad foothills", "quest"]
+  },
+  {
+    "id": "npc_22272_3519",
+    "title": "Kirrik the Awakened (Terokkar Forest)",
+    "content": "Quest giver in Terokkar Forest. 6 quests.",
+    "keywords": ["kirrik the awakened", "terokkar forest"],
+    "tags": ["npc", "terokkar forest", "zone:terokkar forest", "quest"]
+  },
+  {
+    "id": "npc_2228_267",
+    "title": "Lieutenant Farren Orinelle (Hillsbrad Foothills)",
+    "content": "Quest giver in Hillsbrad Foothills. 5 quests.",
+    "keywords": ["lieutenant farren orinelle", "hillsbrad foothills"],
+    "tags": ["npc", "hillsbrad foothills", "zone:hillsbrad foothills", "quest"]
+  },
+  {
+    "id": "npc_23140_3520",
+    "title": "Taskmaster Varkule Dragonbreath (Shadowmoon Valley)",
+    "content": "Quest giver in Shadowmoon Valley. 9 quests.",
+    "keywords": ["taskmaster varkule dragonbreath", "shadowmoon valley"],
+    "tags": ["npc", "shadowmoon valley", "zone:shadowmoon valley", "quest"]
+  },
+  {
+    "id": "npc_23233_3522",
+    "title": "Chu'a'lor (Blade's Edge Mountains)",
+    "content": "Quest giver in Blade's Edge Mountains. 7 quests.",
+    "keywords": ["chu'a'lor", "blade's edge mountains"],
+    "tags": ["npc", "blade's edge mountains", "zone:blade's edge mountains", "quest"]
+  },
+  {
+    "id": "npc_234_40",
+    "title": "Gryan Stoutmantle (Westfall)",
+    "content": "Quest giver in Westfall. 6 quests.",
+    "keywords": ["gryan stoutmantle", "westfall"],
+    "tags": ["npc", "westfall", "zone:westfall", "quest"]
+  },
+  {
+    "id": "npc_23749_495",
+    "title": "Captain Adams (Howling Fjord)",
+    "content": "Quest giver in Howling Fjord. 7 quests.",
+    "keywords": ["captain adams", "howling fjord"],
+    "tags": ["npc", "howling fjord", "zone:howling fjord", "quest"]
+  },
+  {
+    "id": "npc_239_40",
+    "title": "Grimbooze Thunderbrew (Westfall)",
+    "content": "Quest giver in Westfall. 6 quests.",
+    "keywords": ["grimbooze thunderbrew", "westfall"],
+    "tags": ["npc", "westfall", "zone:westfall", "quest"]
+  },
+  {
+    "id": "npc_240_12",
+    "title": "Marshal Dughan (Elwynn Forest)",
+    "content": "Quest giver in Elwynn Forest. 7 quests.",
+    "keywords": ["marshal dughan", "elwynn forest"],
+    "tags": ["npc", "elwynn forest", "zone:elwynn forest", "quest"]
+  },
+  {
+    "id": "npc_24117_495",
+    "title": "Lurielle (Howling Fjord)",
+    "content": "Quest giver in Howling Fjord. 6 quests.",
+    "keywords": ["lurielle", "howling fjord"],
+    "tags": ["npc", "howling fjord", "zone:howling fjord", "quest"]
+  },
+  {
+    "id": "npc_24261_495",
+    "title": "Ulfang (Howling Fjord)",
+    "content": "Quest giver in Howling Fjord. 6 quests.",
+    "keywords": ["ulfang", "howling fjord"],
+    "tags": ["npc", "howling fjord", "zone:howling fjord", "quest"]
+  },
+  {
+    "id": "npc_24703_3537",
+    "title": "Chieftain Wintergale (Borean Tundra)",
+    "content": "Quest giver in Borean Tundra. 6 quests.",
+    "keywords": ["chieftain wintergale", "borean tundra"],
+    "tags": ["npc", "borean tundra", "zone:borean tundra", "quest"]
+  },
+  {
+    "id": "npc_24807_495",
+    "title": "Walt (Howling Fjord)",
+    "content": "Quest giver in Howling Fjord. 9 quests.",
+    "keywords": ["walt", "howling fjord"],
+    "tags": ["npc", "howling fjord", "zone:howling fjord", "quest"]
+  },
+  {
+    "id": "npc_2519_33",
+    "title": "Kin'weelay (Stranglethorn Vale)",
+    "content": "Quest giver in Stranglethorn Vale. 6 quests.",
+    "keywords": ["kin'weelay", "stranglethorn vale"],
+    "tags": ["npc", "stranglethorn vale", "zone:stranglethorn vale", "quest"]
+  },
+  {
+    "id": "npc_25477_3537",
+    "title": "Crafty Wobblesprocket (Borean Tundra)",
+    "content": "Quest giver in Borean Tundra. 6 quests.",
+    "keywords": ["crafty wobblesprocket", "borean tundra"],
+    "tags": ["npc", "borean tundra", "zone:borean tundra", "quest"]
+  },
+  {
+    "id": "npc_25809_3537",
+    "title": "Arch Druid Lathorius (Borean Tundra)",
+    "content": "Quest giver in Borean Tundra. 6 quests.",
+    "keywords": ["arch druid lathorius", "borean tundra"],
+    "tags": ["npc", "borean tundra", "zone:borean tundra", "quest"]
+  },
+  {
+    "id": "npc_26117_4024",
+    "title": "Raelorasz (Borean Tundra)",
+    "content": "Quest giver in Borean Tundra. 7 quests.",
+    "keywords": ["raelorasz", "borean tundra"],
+    "tags": ["npc", "borean tundra", "zone:borean tundra", "quest"]
+  },
+  {
+    "id": "npc_261_12",
+    "title": "Guard Thomas (Elwynn Forest)",
+    "content": "Quest giver in Elwynn Forest. 5 quests.",
+    "keywords": ["guard thomas", "elwynn forest"],
+    "tags": ["npc", "elwynn forest", "zone:elwynn forest", "quest"]
+  },
+  {
+    "id": "npc_26471_65",
+    "title": "Image of Archmage Aethas Sunreaver (Dragonblight)",
+    "content": "Quest giver in Dragonblight. 7 quests.",
+    "keywords": ["image of archmage aethas sunreaver", "dragonblight"],
+    "tags": ["npc", "dragonblight", "zone:dragonblight", "quest"]
+  },
+  {
+    "id": "npc_264_10",
+    "title": "Commander Althea Ebonlocke (Duskwood)",
+    "content": "Quest giver in Duskwood. 7 quests.",
+    "keywords": ["commander althea ebonlocke", "duskwood"],
+    "tags": ["npc", "duskwood", "zone:duskwood", "quest"]
+  },
+  {
+    "id": "npc_26593_65",
+    "title": "Serinar (Dragonblight)",
+    "content": "Quest giver in Dragonblight. 7 quests.",
+    "keywords": ["serinar", "dragonblight"],
+    "tags": ["npc", "dragonblight", "zone:dragonblight", "quest"]
+  },
+  {
+    "id": "npc_265_10",
+    "title": "Madame Eva (Duskwood)",
+    "content": "Quest giver in Duskwood. 5 quests.",
+    "keywords": ["madame eva", "duskwood"],
+    "tags": ["npc", "duskwood", "zone:duskwood", "quest"]
+  },
+  {
+    "id": "npc_26666_394",
+    "title": "Scout Vor'takh (Grizzly Hills)",
+    "content": "Quest giver in Grizzly Hills. 7 quests.",
+    "keywords": ["scout vor'takh", "grizzly hills"],
+    "tags": ["npc", "grizzly hills", "zone:grizzly hills", "quest"]
+  },
+  {
+    "id": "npc_26673_65",
+    "title": "Image of Archmage Modera (Dragonblight)",
+    "content": "Quest giver in Dragonblight. 7 quests.",
+    "keywords": ["image of archmage modera", "dragonblight"],
+    "tags": ["npc", "dragonblight", "zone:dragonblight", "quest"]
+  },
+  {
+    "id": "npc_26875_394",
+    "title": "Lieutenant Dumont (Grizzly Hills)",
+    "content": "Quest giver in Grizzly Hills. 6 quests.",
+    "keywords": ["lieutenant dumont", "grizzly hills"],
+    "tags": ["npc", "grizzly hills", "zone:grizzly hills", "quest"]
+  },
+  {
+    "id": "npc_26883_394",
+    "title": "Raegar Breakbrow (Grizzly Hills)",
+    "content": "Quest giver in Grizzly Hills. 6 quests.",
+    "keywords": ["raegar breakbrow", "grizzly hills"],
+    "tags": ["npc", "grizzly hills", "zone:grizzly hills", "quest"]
+  },
+  {
+    "id": "npc_2703_45",
+    "title": "Zengu (Arathi Highlands)",
+    "content": "Quest giver in Arathi Highlands. 5 quests.",
+    "keywords": ["zengu", "arathi highlands"],
+    "tags": ["npc", "arathi highlands", "zone:arathi highlands", "quest"]
+  },
+  {
+    "id": "npc_2706_45",
+    "title": "Tor'gan (Arathi Highlands)",
+    "content": "Quest giver in Arathi Highlands. 7 quests.",
+    "keywords": ["tor'gan", "arathi highlands"],
+    "tags": ["npc", "arathi highlands", "zone:arathi highlands", "quest"]
+  },
+  {
+    "id": "npc_27136_65",
+    "title": "High Commander Halford Wyrmbane (Dragonblight)",
+    "content": "Quest giver in Dragonblight. 9 quests.",
+    "keywords": ["high commander halford wyrmbane", "dragonblight"],
+    "tags": ["npc", "dragonblight", "zone:dragonblight", "quest"]
+  },
+  {
+    "id": "npc_27262_394",
+    "title": "Windseer Grayhorn (Grizzly Hills)",
+    "content": "Quest giver in Grizzly Hills. 8 quests.",
+    "keywords": ["windseer grayhorn", "grizzly hills"],
+    "tags": ["npc", "grizzly hills", "zone:grizzly hills", "quest"]
+  },
+  {
+    "id": "npc_27277_394",
+    "title": "Master Woodsman Anderhol (Grizzly Hills)",
+    "content": "Quest giver in Grizzly Hills. 6 quests.",
+    "keywords": ["master woodsman anderhol", "grizzly hills"],
+    "tags": ["npc", "grizzly hills", "zone:grizzly hills", "quest"]
+  },
+  {
+    "id": "npc_27295_394",
+    "title": "Hierophant Thayreen (Grizzly Hills)",
+    "content": "Quest giver in Grizzly Hills. 7 quests.",
+    "keywords": ["hierophant thayreen", "grizzly hills"],
+    "tags": ["npc", "grizzly hills", "zone:grizzly hills", "quest"]
+  },
+  {
+    "id": "npc_27801_3711",
+    "title": "Avatar of Freya (Sholazar Basin)",
+    "content": "Quest giver in Sholazar Basin. 12 quests.",
+    "keywords": ["avatar of freya", "sholazar basin"],
+    "tags": ["npc", "sholazar basin", "zone:sholazar basin", "quest"]
+  },
+  {
+    "id": "npc_28039_66",
+    "title": "Commander Kunz (Zul'Drak)",
+    "content": "Quest giver in Zul'Drak. 7 quests.",
+    "keywords": ["commander kunz", "zul'drak"],
+    "tags": ["npc", "zul'drak", "zone:zul'drak", "quest"]
+  },
+  {
+    "id": "npc_28044_66",
+    "title": "Captain Rupert (Zul'Drak)",
+    "content": "Quest giver in Zul'Drak. 6 quests.",
+    "keywords": ["captain rupert", "zul'drak"],
+    "tags": ["npc", "zul'drak", "zone:zul'drak", "quest"]
+  },
+  {
+    "id": "npc_28062_66",
+    "title": "Hexxer Ubungo (Zul'Drak)",
+    "content": "Quest giver in Zul'Drak. 6 quests.",
+    "keywords": ["hexxer ubungo", "zul'drak"],
+    "tags": ["npc", "zul'drak", "zone:zul'drak", "quest"]
+  },
+  {
+    "id": "npc_28401_66",
+    "title": "Har'koa (Zul'Drak)",
+    "content": "Quest giver in Zul'Drak. 11 quests.",
+    "keywords": ["har'koa", "zul'drak"],
+    "tags": ["npc", "zul'drak", "zone:zul'drak", "quest"]
+  },
+  {
+    "id": "npc_28479_66",
+    "title": "Witch Doctor Khufu (Zul'Drak)",
+    "content": "Quest giver in Zul'Drak. 6 quests.",
+    "keywords": ["witch doctor khufu", "zul'drak"],
+    "tags": ["npc", "zul'drak", "zone:zul'drak", "quest"]
+  },
+  {
+    "id": "npc_28503_66",
+    "title": "Overlord Drakuru (Zul'Drak)",
+    "content": "Quest giver in Zul'Drak. 6 quests.",
+    "keywords": ["overlord drakuru", "zul'drak"],
+    "tags": ["npc", "zul'drak", "zone:zul'drak", "quest"]
+  },
+  {
+    "id": "npc_28518_66",
+    "title": "Stefan Vadu (Zul'Drak)",
+    "content": "Quest giver in Zul'Drak. 12 quests.",
+    "keywords": ["stefan vadu", "zul'drak"],
+    "tags": ["npc", "zul'drak", "zone:zul'drak", "quest"]
+  },
+  {
+    "id": "npc_289_10",
+    "title": "Abercrombie (Duskwood)",
+    "content": "Quest giver in Duskwood. 5 quests.",
+    "keywords": ["abercrombie", "duskwood"],
+    "tags": ["npc", "duskwood", "zone:duskwood", "quest"]
+  },
+  {
+    "id": "npc_2921_3",
+    "title": "Lotwil Veriatus (Badlands)",
+    "content": "Quest giver in Badlands. 7 quests.",
+    "keywords": ["lotwil veriatus", "badlands"],
+    "tags": ["npc", "badlands", "zone:badlands", "quest"]
+  },
+  {
+    "id": "npc_29428_67",
+    "title": "Ricket (The Storm Peaks)",
+    "content": "Quest giver in The Storm Peaks. 9 quests.",
+    "keywords": ["ricket", "the storm peaks"],
+    "tags": ["npc", "the storm peaks", "zone:the storm peaks", "quest"]
+  },
+  {
+    "id": "npc_29445_67",
+    "title": "Thorim (The Storm Peaks)",
+    "content": "Quest giver in The Storm Peaks. 7 quests.",
+    "keywords": ["thorim", "the storm peaks"],
+    "tags": ["npc", "the storm peaks", "zone:the storm peaks", "quest"]
+  },
+  {
+    "id": "npc_2948_215",
+    "title": "Mull Thunderhorn (Mulgore)",
+    "content": "Quest giver in Mulgore. 6 quests.",
+    "keywords": ["mull thunderhorn", "mulgore"],
+    "tags": ["npc", "mulgore", "zone:mulgore", "quest"]
+  },
+  {
+    "id": "npc_29579_67",
+    "title": "Brann Bronzebeard (The Storm Peaks)",
+    "content": "Quest giver in The Storm Peaks. 12 quests.",
+    "keywords": ["brann bronzebeard", "the storm peaks"],
+    "tags": ["npc", "the storm peaks", "zone:the storm peaks", "quest"]
+  },
+  {
+    "id": "npc_29795_210",
+    "title": "Koltira Deathweaver (Icecrown)",
+    "content": "Quest giver in Icecrown. 29 quests.",
+    "keywords": ["koltira deathweaver", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_29799_210",
+    "title": "Thassarian (Icecrown)",
+    "content": "Quest giver in Icecrown. 29 quests.",
+    "keywords": ["thassarian", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_29801_67",
+    "title": "Bouldercrag the Rockshaper (The Storm Peaks)",
+    "content": "Quest giver in The Storm Peaks. 11 quests.",
+    "keywords": ["bouldercrag the rockshaper", "the storm peaks"],
+    "tags": ["npc", "the storm peaks", "zone:the storm peaks", "quest"]
+  },
+  {
+    "id": "npc_29839_67",
+    "title": "Astrid Bjornrittar (The Storm Peaks)",
+    "content": "Quest giver in The Storm Peaks. 6 quests.",
+    "keywords": ["astrid bjornrittar", "the storm peaks"],
+    "tags": ["npc", "the storm peaks", "zone:the storm peaks", "quest"]
+  },
+  {
+    "id": "npc_30007_66",
+    "title": "Gurgthock (Zul'Drak)",
+    "content": "Quest giver in Zul'Drak. 7 quests.",
+    "keywords": ["gurgthock", "zul'drak"],
+    "tags": ["npc", "zul'drak", "zone:zul'drak", "quest"]
+  },
+  {
+    "id": "npc_30232_210",
+    "title": "The Bone Witch (Icecrown)",
+    "content": "Quest giver in Icecrown. 9 quests.",
+    "keywords": ["the bone witch", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_30344_210",
+    "title": "High Captain Justin Bartlett (Icecrown)",
+    "content": "Quest giver in Icecrown. 6 quests.",
+    "keywords": ["high captain justin bartlett", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_30345_210",
+    "title": "Chief Engineer Boltwrench (Icecrown)",
+    "content": "Quest giver in Icecrown. 6 quests.",
+    "keywords": ["chief engineer boltwrench", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_30631_210",
+    "title": "Darkrider Arly (Icecrown)",
+    "content": "Quest giver in Icecrown. 9 quests.",
+    "keywords": ["darkrider arly", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_30824_210",
+    "title": "Sky-Reaver Korm Blackscar (Icecrown)",
+    "content": "Quest giver in Icecrown. 6 quests.",
+    "keywords": ["sky-reaver korm blackscar", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_30825_210",
+    "title": "Chief Engineer Copperclaw (Icecrown)",
+    "content": "Quest giver in Icecrown. 6 quests.",
+    "keywords": ["chief engineer copperclaw", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_30944_210",
+    "title": "Vereth the Cunning (Icecrown)",
+    "content": "Quest giver in Icecrown. 9 quests.",
+    "keywords": ["vereth the cunning", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_30946_210",
+    "title": "Keritose Bloodblade (Icecrown)",
+    "content": "Quest giver in Icecrown. 7 quests.",
+    "keywords": ["keritose bloodblade", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_31044_210",
+    "title": "Highlord Tirion Fordring (Icecrown)",
+    "content": "Quest giver in Icecrown. 6 quests.",
+    "keywords": ["highlord tirion fordring", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_31135_210",
+    "title": "Geirrvif (Icecrown)",
+    "content": "Quest giver in Icecrown. 6 quests.",
+    "keywords": ["geirrvif", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_311_10",
+    "title": "Sven Yorgen (Duskwood)",
+    "content": "Quest giver in Duskwood. 5 quests.",
+    "keywords": ["sven yorgen", "duskwood"],
+    "tags": ["npc", "duskwood", "zone:duskwood", "quest"]
+  },
+  {
+    "id": "npc_3230_3483",
+    "title": "Nazgrel (Hellfire Peninsula)",
+    "content": "Quest giver in Hellfire Peninsula. 10 quests.",
+    "keywords": ["nazgrel", "hellfire peninsula"],
+    "tags": ["npc", "hellfire peninsula", "zone:hellfire peninsula", "quest"]
+  },
+  {
+    "id": "npc_3338_17",
+    "title": "Sergra Darkthorn (The Barrens)",
+    "content": "Quest giver in The Barrens. 6 quests.",
+    "keywords": ["sergra darkthorn", "the barrens"],
+    "tags": ["npc", "the barrens", "zone:the barrens", "quest"]
+  },
+  {
+    "id": "npc_3387_17",
+    "title": "Jorn Skyseer (The Barrens)",
+    "content": "Quest giver in The Barrens. 5 quests.",
+    "keywords": ["jorn skyseer", "the barrens"],
+    "tags": ["npc", "the barrens", "zone:the barrens", "quest"]
+  },
+  {
+    "id": "npc_3389_17",
+    "title": "Regthar Deathgate (The Barrens)",
+    "content": "Quest giver in The Barrens. 5 quests.",
+    "keywords": ["regthar deathgate", "the barrens"],
+    "tags": ["npc", "the barrens", "zone:the barrens", "quest"]
+  },
+  {
+    "id": "npc_33956_4273",
+    "title": "Prospector Doren (Ulduar)",
+    "content": "Quest giver in Ulduar. 6 quests.",
+    "keywords": ["prospector doren", "ulduar"],
+    "tags": ["npc", "ulduar", "zone:ulduar", "quest"]
+  },
+  {
+    "id": "npc_33957_4273",
+    "title": "Prospector Loren (Ulduar)",
+    "content": "Quest giver in Ulduar. 6 quests.",
+    "keywords": ["prospector loren", "ulduar"],
+    "tags": ["npc", "ulduar", "zone:ulduar", "quest"]
+  },
+  {
+    "id": "npc_3430_17",
+    "title": "Mangletooth (The Barrens)",
+    "content": "Quest giver in The Barrens. 10 quests.",
+    "keywords": ["mangletooth", "the barrens"],
+    "tags": ["npc", "the barrens", "zone:the barrens", "quest"]
+  },
+  {
+    "id": "npc_34320_490",
+    "title": "Venomhide Hatchling (Un'Goro Crater)",
+    "content": "Quest giver in Un'Goro Crater. 8 quests.",
+    "keywords": ["venomhide hatchling", "un'goro crater"],
+    "tags": ["npc", "un'goro crater", "zone:un'goro crater", "quest"]
+  },
+  {
+    "id": "npc_36642_210",
+    "title": "Myralion Sunblaze (Icecrown)",
+    "content": "Quest giver in Icecrown. 6 quests.",
+    "keywords": ["myralion sunblaze", "icecrown"],
+    "tags": ["npc", "icecrown", "zone:icecrown", "quest"]
+  },
+  {
+    "id": "npc_3691_331",
+    "title": "Raene Wolfrunner (Ashenvale)",
+    "content": "Quest giver in Ashenvale. 5 quests.",
+    "keywords": ["raene wolfrunner", "ashenvale"],
+    "tags": ["npc", "ashenvale", "zone:ashenvale", "quest"]
+  },
+  {
+    "id": "npc_3693_148",
+    "title": "Terenthis (Darkshore)",
+    "content": "Quest giver in Darkshore. 5 quests.",
+    "keywords": ["terenthis", "darkshore"],
+    "tags": ["npc", "darkshore", "zone:darkshore", "quest"]
+  },
+  {
+    "id": "npc_37120_4812",
+    "title": "Highlord Darion Mograine (Icecrown Citadel)",
+    "content": "Quest giver in Icecrown Citadel. 11 quests.",
+    "keywords": ["highlord darion mograine", "icecrown citadel"],
+    "tags": ["npc", "icecrown citadel", "zone:icecrown citadel", "quest"]
+  },
+  {
+    "id": "npc_37527_4075",
+    "title": "Halduron Brightwing (Sunwell Plateau)",
+    "content": "Quest giver in Sunwell Plateau. 6 quests.",
+    "keywords": ["halduron brightwing", "sunwell plateau"],
+    "tags": ["npc", "sunwell plateau", "zone:sunwell plateau", "quest"]
+  },
+  {
+    "id": "npc_38316_4812",
+    "title": "Ormus the Penitent (Icecrown Citadel)",
+    "content": "Quest giver in Icecrown Citadel. 16 quests.",
+    "keywords": ["ormus the penitent", "icecrown citadel"],
+    "tags": ["npc", "icecrown citadel", "zone:icecrown citadel", "quest"]
+  },
+  {
+    "id": "npc_39509_4812",
+    "title": "Aronen (Icecrown Citadel)",
+    "content": "Quest giver in Icecrown Citadel. 20 quests.",
+    "keywords": ["aronen", "icecrown citadel"],
+    "tags": ["npc", "icecrown citadel", "zone:icecrown citadel", "quest"]
+  },
+  {
+    "id": "npc_4077_406",
+    "title": "Gaxim Rustfizzle (Stonetalon Mountains)",
+    "content": "Quest giver in Stonetalon Mountains. 6 quests.",
+    "keywords": ["gaxim rustfizzle", "stonetalon mountains"],
+    "tags": ["npc", "stonetalon mountains", "zone:stonetalon mountains", "quest"]
+  },
+  {
+    "id": "npc_4452_400",
+    "title": "Kravel Koalbeard (Thousand Needles)",
+    "content": "Quest giver in Thousand Needles. 9 quests.",
+    "keywords": ["kravel koalbeard", "thousand needles"],
+    "tags": ["npc", "thousand needles", "zone:thousand needles", "quest"]
+  },
+  {
+    "id": "npc_4630_400",
+    "title": "Pozzik (Thousand Needles)",
+    "content": "Quest giver in Thousand Needles. 5 quests.",
+    "keywords": ["pozzik", "thousand needles"],
+    "tags": ["npc", "thousand needles", "zone:thousand needles", "quest"]
+  },
+  {
+    "id": "npc_4791_15",
+    "title": "Nazeer Bloodpike (Dustwallow Marsh)",
+    "content": "Quest giver in Dustwallow Marsh. 6 quests.",
+    "keywords": ["nazeer bloodpike", "dustwallow marsh"],
+    "tags": ["npc", "dustwallow marsh", "zone:dustwallow marsh", "quest"]
+  },
+  {
+    "id": "npc_482_1519",
+    "title": "Elling Trias (Stormwind City)",
+    "content": "Quest giver in Stormwind City. 5 quests.",
+    "keywords": ["elling trias", "stormwind city"],
+    "tags": ["npc", "stormwind city", "zone:stormwind city", "quest"]
+  },
+  {
+    "id": "npc_4926_15",
+    "title": "Krog (Dustwallow Marsh)",
+    "content": "Quest giver in Dustwallow Marsh. 6 quests.",
+    "keywords": ["krog", "dustwallow marsh"],
+    "tags": ["npc", "dustwallow marsh", "zone:dustwallow marsh", "quest"]
+  },
+  {
+    "id": "npc_4944_15",
+    "title": "Captain Garran Vimes (Dustwallow Marsh)",
+    "content": "Quest giver in Dustwallow Marsh. 6 quests.",
+    "keywords": ["captain garran vimes", "dustwallow marsh"],
+    "tags": ["npc", "dustwallow marsh", "zone:dustwallow marsh", "quest"]
+  },
+  {
+    "id": "npc_4949_1637",
+    "title": "Thrall (Orgrimmar)",
+    "content": "Quest giver in Orgrimmar. 6 quests.",
+    "keywords": ["thrall", "orgrimmar"],
+    "tags": ["npc", "orgrimmar", "zone:orgrimmar", "quest"]
+  },
+  {
+    "id": "npc_5397_405",
+    "title": "Uthek the Wise (Desolace)",
+    "content": "Quest giver in Desolace. 5 quests.",
+    "keywords": ["uthek the wise", "desolace"],
+    "tags": ["npc", "desolace", "zone:desolace", "quest"]
+  },
+  {
+    "id": "npc_5398_405",
+    "title": "Warug (Desolace)",
+    "content": "Quest giver in Desolace. 5 quests.",
+    "keywords": ["warug", "desolace"],
+    "tags": ["npc", "desolace", "zone:desolace", "quest"]
+  },
+  {
+    "id": "npc_5594_440",
+    "title": "Alchemist Pestlezugg (Tanaris)",
+    "content": "Quest giver in Tanaris. 5 quests.",
+    "keywords": ["alchemist pestlezugg", "tanaris"],
+    "tags": ["npc", "tanaris", "zone:tanaris", "quest"]
+  },
+  {
+    "id": "npc_5636_47",
+    "title": "Gryphon Master Talonaxe (The Hinterlands)",
+    "content": "Quest giver in The Hinterlands. 5 quests.",
+    "keywords": ["gryphon master talonaxe", "the hinterlands"],
+    "tags": ["npc", "the hinterlands", "zone:the hinterlands", "quest"]
+  },
+  {
+    "id": "npc_5638_405",
+    "title": "Kreldig Ungor (Desolace)",
+    "content": "Quest giver in Desolace. 7 quests.",
+    "keywords": ["kreldig ungor", "desolace"],
+    "tags": ["npc", "desolace", "zone:desolace", "quest"]
+  },
+  {
+    "id": "npc_6546_15",
+    "title": "Tabetha (Dustwallow Marsh)",
+    "content": "Quest giver in Dustwallow Marsh. 5 quests.",
+    "keywords": ["tabetha", "dustwallow marsh"],
+    "tags": ["npc", "dustwallow marsh", "zone:dustwallow marsh", "quest"]
+  },
+  {
+    "id": "npc_6826_1517",
+    "title": "Talvash del Kissel (Badlands)",
+    "content": "Quest giver in Badlands. 5 quests.",
+    "keywords": ["talvash del kissel", "badlands"],
+    "tags": ["npc", "badlands", "zone:badlands", "quest"]
+  },
+  {
+    "id": "npc_715_33",
+    "title": "Hemet Nesingwary Jr. (Stranglethorn Vale)",
+    "content": "Quest giver in Stranglethorn Vale. 5 quests.",
+    "keywords": ["hemet nesingwary jr.", "stranglethorn vale"],
+    "tags": ["npc", "stranglethorn vale", "zone:stranglethorn vale", "quest"]
+  },
+  {
+    "id": "npc_716_33",
+    "title": "Barnil Stonepot (Stranglethorn Vale)",
+    "content": "Quest giver in Stranglethorn Vale. 6 quests.",
+    "keywords": ["barnil stonepot", "stranglethorn vale"],
+    "tags": ["npc", "stranglethorn vale", "zone:stranglethorn vale", "quest"]
+  },
+  {
+    "id": "npc_7505_4",
+    "title": "Bloodmage Drazial (Blasted Lands)",
+    "content": "Quest giver in Blasted Lands. 6 quests.",
+    "keywords": ["bloodmage drazial", "blasted lands"],
+    "tags": ["npc", "blasted lands", "zone:blasted lands", "quest"]
+  },
+  {
+    "id": "npc_7572_4",
+    "title": "Fallen Hero of the Horde (Blasted Lands)",
+    "content": "Quest giver in Blasted Lands. 9 quests.",
+    "keywords": ["fallen hero of the horde", "blasted lands"],
+    "tags": ["npc", "blasted lands", "zone:blasted lands", "quest"]
+  },
+  {
+    "id": "npc_7724_440",
+    "title": "Senior Surveyor Fizzledowser (Tanaris)",
+    "content": "Quest giver in Tanaris. 6 quests.",
+    "keywords": ["senior surveyor fizzledowser", "tanaris"],
+    "tags": ["npc", "tanaris", "zone:tanaris", "quest"]
+  },
+  {
+    "id": "npc_773_33",
+    "title": "Krazek (Stranglethorn Vale)",
+    "content": "Quest giver in Stranglethorn Vale. 5 quests.",
+    "keywords": ["krazek", "stranglethorn vale"],
+    "tags": ["npc", "stranglethorn vale", "zone:stranglethorn vale", "quest"]
+  },
+  {
+    "id": "npc_7763_440",
+    "title": "Curgle Cranklehop (Tanaris)",
+    "content": "Quest giver in Tanaris. 5 quests.",
+    "keywords": ["curgle cranklehop", "tanaris"],
+    "tags": ["npc", "tanaris", "zone:tanaris", "quest"]
+  },
+  {
+    "id": "npc_7783_16",
+    "title": "Loramus Thalipedes (Azshara)",
+    "content": "Quest giver in Azshara. 5 quests.",
+    "keywords": ["loramus thalipedes", "azshara"],
+    "tags": ["npc", "azshara", "zone:azshara", "quest"]
+  },
+  {
+    "id": "npc_7875_357",
+    "title": "Hadoken Swiftstrider (Feralas)",
+    "content": "Quest giver in Feralas. 6 quests.",
+    "keywords": ["hadoken swiftstrider", "feralas"],
+    "tags": ["npc", "feralas", "zone:feralas", "quest"]
+  },
+  {
+    "id": "npc_8115_357",
+    "title": "Witch Doctor Uzer'i (Feralas)",
+    "content": "Quest giver in Feralas. 8 quests.",
+    "keywords": ["witch doctor uzer'i", "feralas"],
+    "tags": ["npc", "feralas", "zone:feralas", "quest"]
+  },
+  {
+    "id": "npc_823_9",
+    "title": "Deputy Willem (Elwynn Forest)",
+    "content": "Quest giver in Elwynn Forest. 5 quests.",
+    "keywords": ["deputy willem", "elwynn forest"],
+    "tags": ["npc", "elwynn forest", "zone:elwynn forest", "quest"]
+  },
+  {
+    "id": "npc_8479_51",
+    "title": "Kalaran Windblade (Searing Gorge)",
+    "content": "Quest giver in Searing Gorge. 7 quests.",
+    "keywords": ["kalaran windblade", "searing gorge"],
+    "tags": ["npc", "searing gorge", "zone:searing gorge", "quest"]
+  },
+  {
+    "id": "npc_8587_16",
+    "title": "Jediga (Azshara)",
+    "content": "Quest giver in Azshara. 5 quests.",
+    "keywords": ["jediga", "azshara"],
+    "tags": ["npc", "azshara", "zone:azshara", "quest"]
+  },
+  {
+    "id": "npc_9117_490",
+    "title": "J.D. Collie (Un'Goro Crater)",
+    "content": "Quest giver in Un'Goro Crater. 7 quests.",
+    "keywords": ["j.d. collie", "un'goro crater"],
+    "tags": ["npc", "un'goro crater", "zone:un'goro crater", "quest"]
+  },
+  {
+    "id": "npc_9298_618",
+    "title": "Donova Snowden (Winterspring)",
+    "content": "Quest giver in Winterspring. 7 quests.",
+    "keywords": ["donova snowden", "winterspring"],
+    "tags": ["npc", "winterspring", "zone:winterspring", "quest"]
+  },
+  {
+    "id": "npc_9528_361",
+    "title": "Arathandris Silversky (Felwood)",
+    "content": "Quest giver in Felwood. 11 quests.",
+    "keywords": ["arathandris silversky", "felwood"],
+    "tags": ["npc", "felwood", "zone:felwood", "quest"]
+  },
+  {
+    "id": "npc_9529_361",
+    "title": "Maybess Riverbreeze (Felwood)",
+    "content": "Quest giver in Felwood. 11 quests.",
+    "keywords": ["maybess riverbreeze", "felwood"],
+    "tags": ["npc", "felwood", "zone:felwood", "quest"]
+  },
+  {
+    "id": "npc_9619_490",
+    "title": "Torwa Pathfinder (Un'Goro Crater)",
+    "content": "Quest giver in Un'Goro Crater. 5 quests.",
+    "keywords": ["torwa pathfinder", "un'goro crater"],
+    "tags": ["npc", "un'goro crater", "zone:un'goro crater", "quest"]
+  },
+  {
+    "id": "npc_9836_46",
+    "title": "Mathredis Firestar (Burning Steppes)",
+    "content": "Quest giver in Burning Steppes. 5 quests.",
+    "keywords": ["mathredis firestar", "burning steppes"],
+    "tags": ["npc", "burning steppes", "zone:burning steppes", "quest"]
+  },
+  {
+    "id": "npc_baine_bloodhoof",
+    "title": "Baine Bloodhoof",
+    "content": "Tauren leader in Bloodhoof Village, Mulgore.",
+    "keywords": ["npc baine bloodhoof", "mulgore", "baine bloodhoof"],
+    "tags": ["npc", "zone:mulgore"]
+  },
+  {
+    "id": "npc_executor_arren",
+    "title": "Executor Arren",
+    "content": "Deathknell quest giver.",
+    "keywords": ["tirisfal", "npc executor arren", "executor arren"],
+    "tags": ["npc", "zone:tirisfal"]
+  },
+  {
+    "id": "npc_gar_thok",
+    "title": "Gar'Thok",
+    "content": "Orc quest giver in Durotar.",
+    "keywords": ["npc gar thok", "gar'thok", "durotar"],
+    "tags": ["npc", "zone:durotar"]
+  },
+  {
+    "id": "npc_marshal_mcbride",
+    "title": "Marshal McBride",
+    "content": "Northshire quest giver for humans.",
+    "keywords": ["elwynn", "marshal mcbride", "npc marshal mcbride"],
+    "tags": ["npc", "zone:elwynn"]
+  }
+]

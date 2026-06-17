@@ -2,8 +2,8 @@
   {
     "id": "item_tier_sets",
     "title": "Tier Sets",
-    "content": "Tier sets are high-level armor sets obtained from raid bosses. Each tier provides significant stat bonuses when multiple pieces are equipped. Tier 1 (Molten Core), Tier 2 (Blackwing Lair), Tier 3 (Ahn'Qiraj), Tier 4 (Naxxramas), Tier 5 (The Burning Crusade raids). Tier sets are highly sought after for their power and prestige. Many players collect complete sets for achievements and bragging rights.",
-    "keywords": ["tier sets", "raid armor", "set bonuses", "molten core", "blackwing lair", "ahn qiraj", "naxxramas", "burning crusade", "high level", "stat bonuses", "raid bosses", "power", "prestige", "achievements", "bragging rights", "collect", "complete sets"],
+    "content": "Tier sets are raid armor with set bonuses. Classic: T1 Molten Core, T2 Blackwing Lair, T3 Naxx (Classic). TBC: T4 Karazhan/Gruul, T5 SSC/TK, T6 Black Temple/Sunwell. Wrath: T7 Naxx/OS/EoE, T8 Ulduar, T9 Trial of Crusader, T10 Icecrown Citadel. Each tier has 10-man and 25-man variants.",
+    "keywords": ["tier sets", "t7", "t8", "t9", "t10", "ulduar", "icc", "naxxramas", "set bonuses", "raid armor", "wrath"],
     "tags": ["items", "equipment", "raid", "tier"]
   },
   {
@@ -103,5 +103,40 @@
     "content": "Relics are special items that provide bonuses to certain classes. Librams for paladins, idols for druids, totems for shamans. Relics are equipped in off-hand slots and provide unique bonuses. Some relics are very rare and powerful. Relics often have lore connections to class stories. Obtaining powerful relics is a goal for many players.",
     "keywords": ["relics", "artifacts", "librams", "idols", "totems", "offhand", "bonuses", "paladins", "druids", "shamans", "equipped", "unique bonuses", "rare", "powerful", "lore connections", "class stories", "obtaining", "goal"],
     "tags": ["items", "relics", "class", "bonuses"]
+  },
+  {
+    "id": "item_tier_wrath",
+    "title": "Wrath Tier Sets (T7-T10)",
+    "content": "Wrath tier progression: Tier 7 from Naxx/OS/EoE (10/25), Tier 8 from Ulduar, Tier 9 from Trial of Crusader, Tier 10 from Icecrown Citadel. Each tier has 10-man and 25-man variants with different art. Set bonuses enhance class rotations. Emblems supplement tier slots.",
+    "keywords": ["tier 7", "tier 8", "tier 9", "tier 10", "naxxramas", "ulduar", "toc", "icc", "set bonus", "wrath"],
+    "tags": ["items", "equipment", "raid", "wrath", "tier"]
+  },
+  {
+    "id": "item_shadowmourne",
+    "title": "Shadowmourne Legendary",
+    "content": "Shadowmourne is a legendary two-handed axe from Icecrown Citadel. The quest chain requires collecting quest items from ICC bosses, saronite, and heroic difficulty drops. Primarily for warriors, death knights, and paladins. One of Wrath's ultimate accomplishments.",
+    "keywords": ["shadowmourne", "legendary", "icc", "axe", "quest chain", "saronite", "warrior", "death knight"],
+    "tags": ["items", "weapons", "legendary", "wrath"]
+  },
+  {
+    "id": "item_quel_delar",
+    "title": "Quel'Delar Quest Chain",
+    "content": "Quel'Delar is an epic weapon quest chain starting from ICC dungeon drops. Players reforge the ancient high elven blade through Sunwell and Halls of Reflection scenarios. Rewards a ilvl 245 weapon suited to class role (sword, mace, dagger variants).",
+    "keywords": ["quel delar", "quest", "icc", "halls of reflection", "sunwell", "weapon"],
+    "tags": ["items", "weapons", "quest", "wrath"]
+  },
+  {
+    "id": "item_emblem_gear",
+    "title": "Emblem Vendor Gear",
+    "content": "Emblem vendors in Dalaran sell ilvl gear for Heroism, Triumph, and Frost emblems. Frost emblems in 3.3 buy the best non-raid pieces. Many players fill tier gaps with emblem chest, helm, and off-set slots before full raid progression.",
+    "keywords": ["emblem gear", "frost", "triumph", "heroism", "dalaran", "vendor", "ilvl"],
+    "tags": ["items", "equipment", "currency", "wrath"]
+  },
+  {
+    "id": "item_northrend_crafting",
+    "title": "Northrend Crafted Gear",
+    "content": "Wrath crafting peaks with item level 264 recipes from ICC patterns and max-skill professions. Engineering goggles, jewelcrafting gems, blacksmithing socket bracers, and inscription trinkets are popular. Frozen Orb and Primordial Saronite are key materials.",
+    "keywords": ["crafting", "northrend", "engineering", "jewelcrafting", "blacksmithing", "frozen orb", "saronite", "ilvl 264"],
+    "tags": ["items", "professions", "wrath", "crafting"]
   }
 ]

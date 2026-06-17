@@ -103,5 +103,54 @@
     "content": "Quests not obviously marked on the map. Hidden quests require exploration, talking to specific NPCs, or discovering secret areas. Examples include the quest for the Green Hills of Stranglethorn pages or the hidden quests in Blackrock Mountain. Finding hidden quests provides satisfaction and unique rewards.",
     "keywords": ["hidden quests", "secret quests", "exploration", "green hills", "blackrock mountain", "satisfaction", "not obviously marked", "on the map", "require exploration", "talking to specific npcs", "discovering secret areas", "quest for the", "green hills of stranglethorn", "pages", "hidden quests in", "finding hidden quests", "provides satisfaction", "unique rewards"],
     "tags": ["quests", "hidden", "secret", "exploration"]
+  },
+  {
+    "id": "quest_wrath_main_story",
+    "title": "Wrath Main Storyline",
+    "content": "The Wrath storyline follows the Alliance and Horde invasion of Northrend to stop the Lich King. Key beats include the Wrathgate betrayal, Battle for Angrathar, questing through Dragonblight and Icecrown, the Argent Tournament, and the assault on Icecrown Citadel. Bolvar Fordragon, Tirion Fordring, and Saurfang feature prominently.",
+    "keywords": ["wrath", "lich king", "northrend", "wrathgate", "bolvar", "tirion", "saurfang", "story", "icecrown"],
+    "tags": ["quests", "story", "wrath", "northrend"]
+  },
+  {
+    "id": "quest_death_knight_start",
+    "title": "Death Knight Starting Zone",
+    "content": "Death Knights begin in Plaguelands: The Scarlet Enclave, a phased starting experience. Players serve the Lich King under Darion Mograine, attack Light's Hope Chapel, and ultimately defect to either Alliance or Horde at level 55-58. The storyline introduces runeblades, the Four Horsemen, and Arthas's manipulation.",
+    "keywords": ["death knight", "scarlet enclave", "acherus", "darion mograine", "lights hope chapel", "starting zone", "arthas"],
+    "tags": ["quests", "story", "death_knight", "wrath"]
+  },
+  {
+    "id": "quest_argent_tournament",
+    "title": "Argent Tournament",
+    "content": "The Argent Tournament in Icecrown is a daily quest hub where players joust, fight champions, and grind Argent Crusade and Sunreaver/Silver Covenant reputation. It unlocks Trial of the Champion dungeon and Trial of the Crusader raid. Coliseum champions represent each class and faction.",
+    "keywords": ["argent tournament", "jousting", "icecrown", "daily", "trial of the champion", "trial of the crusader", "reputation"],
+    "tags": ["quests", "wrath", "daily", "reputation", "icecrown"]
+  },
+  {
+    "id": "quest_icecrown_citadel_chain",
+    "title": "Icecrown Citadel Quest Chain",
+    "content": "The ICC quest chain begins with the Forge of Souls trio (FoS, PoS, HoR dungeons) and continues with assault quests inside Icecrown Citadel. Players work with the Ashen Verdict faction. Quel'Delar optional chain and Shadowmourne legendary quest start from raid content.",
+    "keywords": ["icecrown citadel", "icc", "forge of souls", "ashen verdict", "quel delar", "shadowmourne", "quest chain"],
+    "tags": ["quests", "wrath", "raid", "icecrown"]
+  },
+  {
+    "id": "quest_northrend_factions",
+    "title": "Northrend Faction Reputation",
+    "content": "Major Northrend factions include Argent Crusade, Kirin Tor, Wyrmrest Accord, Knights of the Ebon Blade, The Sons of Hodir, The Oracles/Frenzyheart, and Alliance Vanguard/Horde Expedition. Tabard championing in heroics and daily quests in each zone unlock exalted rewards and head enchants.",
+    "keywords": ["northrend", "reputation", "argent crusade", "kirin tor", "wyrmrest", "ebon blade", "sons of hodir", "oracles", "frenzyheart"],
+    "tags": ["quests", "reputation", "wrath", "northrend"]
+  },
+  {
+    "id": "quest_classic_epic_mounts",
+    "title": "Epic Mount Quests",
+    "content": "Classic epic mount quests exist for paladins (charger) and warlocks (dreadsteed) before patch changes. Other classes buy 100% speed mounts at level 60 for gold. Wrath adds flying mounts at 70 and cold weather flying at 77.",
+    "keywords": ["epic mount", "charger", "dreadsteed", "100 percent", "flying mount", "cold weather"],
+    "tags": ["quests", "mounts", "classic"]
+  },
+  {
+    "id": "quest_borean_tundra_vs_fjord",
+    "title": "Borean Tundra vs Howling Fjord",
+    "content": "Alliance typically choose Borean Tundra (Valiance Keep, closer to Nexus) or Howling Fjord (Valgarde, Utgarde Keep). Horde choose Borean Tundra (Warsong Hold) or Howling Fjord (Vengeance Landing). Both paths reach level 72 and converge in Dragonblight.",
+    "keywords": ["borean tundra", "howling fjord", "valiance keep", "valgarde", "warsong hold", "vengeance landing", "starting northrend"],
+    "tags": ["quests", "wrath", "northrend", "leveling"]
   }
 ]

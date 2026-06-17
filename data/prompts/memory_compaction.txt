@@ -1,0 +1,5 @@
+Merge memory. Reply only:
+[PROFILE]
+facts
+[HISTORY]
+story

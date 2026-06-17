@@ -1,0 +1,5 @@
+Update memory from recent chat. Reply only:
+[PROFILE]
+facts
+[HISTORY]
+story

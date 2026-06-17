@@ -53,16 +53,13 @@ float AnalyzeMessageSentiment(const std::string& message)
     if (!g_EnableSentimentTracking || message.empty())
         return 0.0f;
 
-    // Format the sentiment analysis prompt
     std::string prompt = SafeFormat(g_SentimentAnalysisPrompt, fmt::arg("message", message));
-    
+
     if (g_DebugEnabled)
-    {
         LOG_INFO("server.loading", "[OllamaChat] Sentiment analysis prompt: {}", prompt);
-    }
-    
-    // Query the LLM for sentiment analysis
-    std::string response = QueryOllamaAPI(prompt);
+
+    auto future = SubmitQuery(prompt);
+    std::string response = future.valid() ? future.get() : "";
     
     if (response.empty())
     {
@@ -125,19 +122,13 @@ void UpdateBotPlayerSentiment(Player* bot, Player* player, const std::string& me
 
 std::string GetSentimentPromptAddition(Player* bot, Player* player)
 {
-    if (!g_EnableSentimentTracking || !bot || !player || g_SentimentPromptTemplate.empty())
+    if (!g_EnableSentimentTracking || !bot || !player)
         return "";
 
-    uint64_t botGuid = bot->GetGUID().GetRawValue();
-    uint64_t playerGuid = player->GetGUID().GetRawValue();
-    
-    float sentimentValue = GetBotPlayerSentiment(botGuid, playerGuid);
-    
-    return SafeFormat(
-        g_SentimentPromptTemplate,
-        fmt::arg("player_name", player->GetName()),
-        fmt::arg("sentiment_value", sentimentValue)
-    );
+    float sentimentValue = GetBotPlayerSentiment(bot->GetGUID().GetRawValue(), player->GetGUID().GetRawValue());
+
+    return fmt::format("Relationship with {}: {:.2f} (0=hostile, 0.5=neutral, 1=friendly)",
+        player->GetName(), sentimentValue);
 }
 
 void LoadBotPlayerSentimentsFromDB()

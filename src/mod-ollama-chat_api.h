@@ -4,16 +4,18 @@
 #include <string>
 #include <future>
 #include "mod-ollama-chat_querymanager.h"
+#include "mod-ollama-chat_prompt.h"
 
-std::string QueryOllamaAPI(const std::string& prompt);
+std::string QueryOllamaAPI(std::string const& prompt);
+std::string QueryOllamaAPI(PromptBundle const& bundle);
 
-// Checks if an API response is valid (not an error message)
-bool IsValidAPIResponse(const std::string& response);
+bool IsValidAPIResponse(std::string const& response);
 
-// Submits a query to the API.
-std::future<std::string> SubmitQuery(const std::string& prompt);
+bool ValidateOllamaModel();
 
-// Declare the global QueryManager variable.
+std::future<std::string> SubmitQuery(std::string const& prompt);
+std::future<std::string> SubmitQuery(PromptBundle bundle);
+
 extern QueryManager g_queryManager;
 
-#endif // MOD_OLLAMA_CHAT_API_H
+#endif

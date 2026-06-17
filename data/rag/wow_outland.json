@@ -1,0 +1,51 @@
+[
+  {
+    "id": "zone_hellfire_peninsula",
+    "title": "Hellfire Peninsula",
+    "content": "Hellfire Peninsula is the first Outland zone for level 58-63 characters entering through the Dark Portal. Alliance bases at Honor Hold, Horde at Thrallmar. The zone contains Hellfire Ramparts, Blood Furnace, and Shattered Halls dungeons. Fel orcs, demons, and the ruins of Draenor define the harsh landscape. Players begin Burning Crusade questing and learn about Illidan and the Legion's remnants.",
+    "keywords": ["hellfire peninsula", "outland", "dark portal", "honor hold", "thrallmar", "hellfire ramparts", "level 58", "fel orcs"],
+    "tags": ["zone", "outland", "tbc", "leveling"]
+  },
+  {
+    "id": "zone_zangarmarsh",
+    "title": "Zangarmarsh",
+    "content": "Zangarmarsh is a level 60-64 Outland zone of mushroom forests and swamps. Alliance Cenarion Refuge and Horde Zabra'jin are main hubs. Dungeons include Slave Pens, Underbog, and Steamvault. The zone features nagas, sporeggar, and the conflict over draining the marsh. Players gather herbs and work toward Cenarion Expedition reputation.",
+    "keywords": ["zangarmarsh", "outland", "cenarion refuge", "naga", "slave pens", "underbog", "level 60", "mushroom"],
+    "tags": ["zone", "outland", "tbc", "leveling"]
+  },
+  {
+    "id": "zone_terokkar_forest",
+    "title": "Terokkar Forest",
+    "content": "Terokkar Forest is a level 62-65 Outland zone containing Shattrath City, the neutral hub for both factions. Auchindoun dungeons (Mana-Tombs, Auchenai Crypts, Sethekk Halls, Shadow Labyrinth) lie in the bone wastes. Skettis daily quests and arakkoa enemies feature prominently. Shattrath hosts the Sha'tar and Aldor/Scryer factions.",
+    "keywords": ["terokkar forest", "outland", "shattrath", "auchindoun", "skettis", "arakkoa", "level 62", "sha tar"],
+    "tags": ["zone", "outland", "tbc", "leveling", "city"]
+  },
+  {
+    "id": "zone_nagrand",
+    "title": "Nagrand",
+    "content": "Nagrand is a level 64-67 Outland zone of floating islands and open plains. Garadar (Horde) and Telaar (Alliance) are faction hubs. The zone is famous for rare elites, elemental plateaus, and the Magtheridon raid entrance at the Citadel. Nagrand offers dense questing, PvP hotspots, and scenic vistas of Draenor's remnants.",
+    "keywords": ["nagrand", "outland", "garadar", "telaar", "magtheridon", "level 64", "floating islands", "elemental plateau"],
+    "tags": ["zone", "outland", "tbc", "leveling"]
+  },
+  {
+    "id": "zone_blades_edge_mountains",
+    "title": "Blade's Edge Mountains",
+    "content": "Blade's Edge Mountains is a level 65-68 Outland zone of spire-filled canyons. Gruul's Lair raid sits atop the mountains. Ogri'la daily quests and apexis crystal grinding are endgame activities here. The zone features ogres, raptors, and the conflict between Gruul's sons and the ogre clans.",
+    "keywords": ["blades edge mountains", "outland", "gruul", "ogri la", "level 65", "ogres", "apexis"],
+    "tags": ["zone", "outland", "tbc", "leveling"]
+  },
+  {
+    "id": "zone_netherstorm",
+    "title": "Netherstorm",
+    "content": "Netherstorm is a level 67-70 Outland zone of shattered floating islands and arcane storms. Area 52 is the goblin hub; the Ethereum, blood elves, and demons populate the zone. Tempest Keep raid (Eye) and Mechanar, Botanica, and Arcatraz dungeons are accessed here. Players finish Burning Crusade leveling toward level 70.",
+    "keywords": ["netherstorm", "outland", "area 52", "tempest keep", "ethereum", "level 67", "arcane storms"],
+    "tags": ["zone", "outland", "tbc", "leveling"]
+  },
+  {
+    "id": "zone_shadowmoon_valley",
+    "title": "Shadowmoon Valley",
+    "content": "Shadowmoon Valley is the level 67-70 final Outland zone. Shadowmoon Village (Horde) and Wildhammer Stronghold (Alliance) anchor questing. Black Temple raid lies in the east. The zone tells the story of Illidan, the Ashtongue, and the fel corruption of Draenor. Players prepare for Northrend after completing Outland content.",
+    "keywords": ["shadowmoon valley", "outland", "black temple", "illidan", "level 67", "fel", "ashtongue"],
+    "tags": ["zone", "outland", "tbc", "leveling", "endgame"]
+  }
+]

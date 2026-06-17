@@ -1,56 +1,72 @@
 #include "mod-ollama-chat_querymanager.h"
-#include "mod-ollama-chat_config.h"  // For g_MaxConcurrentQueries
+#include "mod-ollama-chat_config.h"
+#include "mod-ollama-chat_api.h"
 #include <thread>
+#include <utility>
 
-// Constructor: initialize with the configuration value.
 QueryManager::QueryManager()
     : maxConcurrentQueries(g_MaxConcurrentQueries), currentQueries(0)
 {
 }
 
-// Set maximum concurrent queries (0 means no limit).
 void QueryManager::setMaxConcurrentQueries(int maxQueries) {
     std::lock_guard<std::mutex> lock(mutex_);
     maxConcurrentQueries = maxQueries;
 }
 
-// Submit a query and return a future for the result.
-std::future<std::string> QueryManager::submitQuery(const std::string& prompt) {
+std::future<std::string> QueryManager::submitQuery(std::string const& prompt)
+{
+    PromptBundle bundle;
+    bundle.user = prompt;
+    return submitQuery(std::move(bundle));
+}
+
+std::future<std::string> QueryManager::submitQuery(PromptBundle bundle)
+{
     std::promise<std::string> promise;
     std::future<std::string> future = promise.get_future();
-
-    bool shouldRunNow = false;
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (maxConcurrentQueries == 0 || currentQueries < maxConcurrentQueries) {
             ++currentQueries;
-            shouldRunNow = true;
         } else {
-            taskQueue.push({ prompt, std::move(promise) });
+            taskQueue.push({ std::move(bundle), std::move(promise) });
+            return future;
         }
     }
 
-    if (shouldRunNow) {
-        std::thread(&QueryManager::processQuery, this, prompt, std::move(promise)).detach();
-    }
-
+    std::thread(&QueryManager::processQuery, this, std::move(bundle), std::move(promise)).detach();
     return future;
 }
 
-// Process the query by calling the API and then handling any queued tasks.
-void QueryManager::processQuery(const std::string& prompt, std::promise<std::string> promise) {
-    std::string result = QueryOllamaAPI(prompt);
-    promise.set_value(result);
-
+void QueryManager::processQuery(PromptBundle bundle, std::promise<std::string> promise)
+{
+    std::string result;
+    try
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        --currentQueries;
-        if (!taskQueue.empty() && (maxConcurrentQueries == 0 || currentQueries < maxConcurrentQueries)) {
-            QueryTask task = std::move(taskQueue.front());
-            taskQueue.pop();
-            ++currentQueries;
-            std::thread(&QueryManager::processQuery, this, task.prompt, std::move(task.promise)).detach();
-        }
+        result = QueryOllamaAPI(bundle);
+    }
+    catch (...)
+    {
+        result = "";
+    }
+
+    try
+    {
+        promise.set_value(result);
+    }
+    catch (...)
+    {
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    --currentQueries;
+    if (!taskQueue.empty() && (maxConcurrentQueries == 0 || currentQueries < maxConcurrentQueries))
+    {
+        QueryTask task = std::move(taskQueue.front());
+        taskQueue.pop();
+        ++currentQueries;
+        std::thread(&QueryManager::processQuery, this, std::move(task.bundle), std::move(task.promise)).detach();
     }
 }
