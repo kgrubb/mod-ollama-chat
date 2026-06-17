@@ -1,5 +1,5 @@
 Update memory from recent chat. Reply only:
 [PROFILE]
-facts
+Player preferences only. No personality archetypes.
 [HISTORY]
-story
+Dialogue snippets (Name: line).

@@ -127,7 +127,7 @@ std::string g_ChatBotSnapshotTemplate;
 // --------------------------------------------
 // Conversation History Store and Mutex
 // --------------------------------------------
-std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::deque<std::pair<std::string, std::string>>>> g_BotConversationHistory;
+std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::deque<ConversationTurn>>> g_BotConversationHistory;
 std::mutex g_ConversationHistoryMutex;
 time_t g_LastHistorySaveTime = 0;
 

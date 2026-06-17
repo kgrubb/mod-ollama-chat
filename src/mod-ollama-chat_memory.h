@@ -42,7 +42,7 @@ void MaybeEnqueueMemoryCompaction(uint64_t botGuid, uint64_t playerGuid);
 void MaybeEnqueueMemoryNudge(uint64_t botGuid, uint64_t playerGuid, std::string const& playerMessage, bool isEvent);
 void ProcessMemoryCompactionTick();
 void AppendBotMemoryTurn(uint64_t botGuid, uint64_t playerGuid, std::string const& playerMessage,
-    std::string const& botReply, bool isEvent);
+    std::string const& botReply, bool isEvent, bool verified = true);
 std::string GetMemoryPromptAddition(uint64_t botGuid, uint64_t playerGuid, const std::string& query, const std::string& playerName);
 uint32_t GetPendingTurnCount(uint64_t botGuid, uint64_t playerGuid);
 void ResetBotMemory(uint64_t botGuid, uint64_t playerGuid);

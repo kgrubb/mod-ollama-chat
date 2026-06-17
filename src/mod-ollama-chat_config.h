@@ -121,7 +121,14 @@ extern std::string g_ChatBotSnapshotTemplate;
 // --------------------------------------------
 // Conversation History Store and Mutex
 // --------------------------------------------
-extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::deque<std::pair<std::string, std::string>>>> g_BotConversationHistory;
+struct ConversationTurn
+{
+    std::string playerMessage;
+    std::string botReply;
+    bool verified = true;
+};
+
+extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::deque<ConversationTurn>>> g_BotConversationHistory;
 extern std::mutex   g_ConversationHistoryMutex;
 extern time_t       g_LastHistorySaveTime;
 

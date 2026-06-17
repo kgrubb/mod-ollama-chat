@@ -31,6 +31,7 @@ struct GroupContext
     uint32_t botCount = 0;
     std::string statusLine;
     std::string partySection;
+    std::vector<std::string> memberNames;
 };
 
 std::string rtrim(const std::string& s);
@@ -48,7 +49,12 @@ void EnsureBotInGeneralChannel(Player* bot);
 void EnsureBotInCityChannels(Player* bot);
 
 void SaveBotConversationHistoryToDB();
-void AppendBotConversation(uint64_t botGuid, uint64_t playerGuid, const std::string& playerMessage, const std::string& botReply, bool isEvent = false, ChatChannelSourceLocal channel = SRC_UNDEFINED_LOCAL, bool senderIsBot = false);
+void AppendBotConversation(uint64_t botGuid, uint64_t playerGuid, const std::string& playerMessage, const std::string& botReply, bool isEvent = false, ChatChannelSourceLocal channel = SRC_UNDEFINED_LOCAL, bool senderIsBot = false, bool verified = true);
+
+void AppendZoneGeneralTranscript(uint32_t zoneId, std::string const& speaker, std::string const& text, bool isBot);
+std::string FormatRecentGeneralTranscript(uint32_t zoneId, size_t maxLines = 8);
+void MarkHumanGeneralActivity(uint32_t zoneId);
+bool HumanActiveInZoneGeneralRecently(uint32_t zoneId);
 
 bool TrySendGeneralChat(Player* bot, std::string& response, std::string const& triggerMsg, Channel* channel);
 

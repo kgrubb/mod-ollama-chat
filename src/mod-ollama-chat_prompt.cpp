@@ -461,6 +461,8 @@ BotContext OllamaPromptComposer::GatherBotContext(Player* bot, Player* playerOrN
 
 bool OllamaPromptComposer::IsFactualQuestion(std::string const& message)
 {
+    if (IsSocialPresenceQuestion(message))
+        return false;
     std::string lower = message;
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
     static char const* markers[] = {
@@ -473,6 +475,95 @@ bool OllamaPromptComposer::IsFactualQuestion(std::string const& message)
             return true;
     }
     return false;
+}
+
+bool OllamaPromptComposer::IsSocialPresenceQuestion(std::string const& message)
+{
+    std::string lower = message;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    static char const* markers[] = {
+        "anyone in", "anyone here", "anybody around", "anyone at",
+        "who's in", "who is in", "anybody here", "anyone around"
+    };
+    for (char const* m : markers)
+    {
+        if (lower.find(m) != std::string::npos)
+            return true;
+    }
+    return false;
+}
+
+namespace
+{
+bool ContainsWholeWord(std::string const& haystackLower, std::string const& wordLower)
+{
+    if (wordLower.empty())
+        return false;
+    size_t pos = 0;
+    while ((pos = haystackLower.find(wordLower, pos)) != std::string::npos)
+    {
+        bool leftOk = pos == 0 || !std::isalnum(static_cast<unsigned char>(haystackLower[pos - 1]));
+        size_t end = pos + wordLower.size();
+        bool rightOk = end >= haystackLower.size() || !std::isalnum(static_cast<unsigned char>(haystackLower[end]));
+        if (leftOk && rightOk)
+            return true;
+        pos += wordLower.size();
+    }
+    return false;
+}
+
+bool ContainsMarker(std::string const& lower, char const* const* markers, size_t count)
+{
+    for (size_t i = 0; i < count; ++i)
+    {
+        if (lower.find(markers[i]) != std::string::npos)
+            return true;
+    }
+    return false;
+}
+} // namespace
+
+ChatIntent DetectChatIntent(std::string const& message, std::vector<std::string> const& referenceNames)
+{
+    ChatIntent intent;
+    std::string lower = message;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+    static char const* kPresence[] = { "anyone in", "anyone here", "anybody around", "anyone at", "anybody here" };
+    static char const* kParty[] = { "party", "group up", "join me", "invite", "lfm", "want to group", "group?" };
+    static char const* kQuestionStart[] = { "who ", "what ", "when ", "where ", "how ", "why " };
+
+    intent.presenceQuestion = ContainsMarker(lower, kPresence, sizeof(kPresence) / sizeof(kPresence[0]));
+    intent.partyInvite = ContainsMarker(lower, kParty, sizeof(kParty) / sizeof(kParty[0]));
+    intent.directQuestion = !message.empty() && (message.back() == '?' ||
+        ContainsMarker(lower, kQuestionStart, sizeof(kQuestionStart) / sizeof(kQuestionStart[0])));
+
+    for (std::string const& name : referenceNames)
+    {
+        std::string nameLower = name;
+        std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+        if (ContainsWholeWord(lower, nameLower))
+        {
+            intent.botReference = true;
+            intent.referencedName = nameLower;
+            break;
+        }
+    }
+    return intent;
+}
+
+std::string BuildIntentTaskLines(ChatIntent const& intent)
+{
+    std::string lines;
+    if (intent.presenceQuestion)
+        lines += "Answer presence only (yes/no/here). No quest tips unless asked.\n";
+    if (intent.partyInvite)
+        lines += "First few words: clear accept or decline, then optional banter.\n";
+    if (intent.botReference && !intent.referencedName.empty())
+        lines += "Acknowledge " + intent.referencedName + "; do not contradict unseen context.\n";
+    if (intent.directQuestion)
+        lines += "Answer the question directly in the first clause.\n";
+    return lines;
 }
 
 std::string OllamaPromptComposer::BuildRagQuery(std::string const& message, std::string const& zone, std::string const& area)
@@ -563,9 +654,11 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
             : g_MemoryCompactionPrompt;
         std::ostringstream u;
         u << "Existing:\n" << input.compactionExistingMemory << "\n\n";
-        u << "New turns:\n" << input.compactionEpisodicTurns << "\n\n";
-        u << "Player: " << input.compactionPlayerName << " Sentiment: " << input.compactionSentiment
-          << " Personality: " << ctx.personalityKey << " - " << ctx.personalityLine;
+        if (!input.compactionEpisodicVerified.empty())
+            u << "Verified turns (PROFILE + HISTORY):\n" << input.compactionEpisodicVerified << "\n\n";
+        if (!input.compactionEpisodicUnverified.empty())
+            u << "Unverified turns (HISTORY only):\n" << input.compactionEpisodicUnverified << "\n\n";
+        u << "Player: " << input.compactionPlayerName << " Sentiment: " << input.compactionSentiment;
         bundle.user = u.str();
         return bundle;
     }
@@ -592,6 +685,9 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
 
     if (!input.chatHistorySection.empty())
         AppendSection(user, "History", input.chatHistorySection);
+
+    if (!input.recentGeneralSection.empty())
+        AppendSection(user, "RecentGeneral", input.recentGeneralSection);
 
     if (!input.knowledgeSection.empty())
         AppendSection(user, "Knowledge", input.knowledgeSection);
@@ -639,6 +735,13 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
                 task << "Message: \"" << input.playerMessage << "\"\n";
             }
             task << g_ChatTask;
+            if (!input.intentTaskLines.empty())
+                task << "\n" << input.intentTaskLines;
+            if (!input.verificationFeedback.empty())
+                task << "\nCorrection: " << input.verificationFeedback;
+            if (ctx.groupCtx.memberCount > 0 && (input.intentTaskLines.find("party") != std::string::npos ||
+                input.intentTaskLines.find("Acknowledge") != std::string::npos))
+                task << "\nIf invited to party or referenced by name, respond to that before jokes.";
             break;
     }
     AppendSection(user, "Task", task.str());
@@ -727,7 +830,7 @@ void EnrichPromptBundle(PromptBundle& bundle, Player* bot, BotContext const& ctx
 }
 
 PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string const& playerMessage,
-    ChatChannelSourceLocal channel)
+    ChatChannelSourceLocal channel, ChatIntent const& intent, std::string const& verificationFeedback)
 {
     BotContext ctx = OllamaPromptComposer::GatherBotContext(bot, player);
     ctx.personalityLine = GetPersonalityPromptForChannel(ctx.personalityKey, channel);
@@ -744,6 +847,8 @@ PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string cons
     input.playerMessage = playerMessage;
     input.factualQuestion = OllamaPromptComposer::IsFactualQuestion(playerMessage);
     input.chatChannel = channel;
+    input.intentTaskLines = BuildIntentTaskLines(intent);
+    input.verificationFeedback = verificationFeedback;
 
     uint64_t botGuid = bot->GetGUID().GetRawValue();
     uint64_t playerGuid = player->GetGUID().GetRawValue();
@@ -765,7 +870,10 @@ PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string cons
     if (g_EnableMemory && !skipContext)
         input.memorySection = GetMemoryPromptAddition(botGuid, playerGuid, playerMessage, player->GetName());
 
-    if (g_EnableRAG && g_RAGSystem)
+    if (channel == SRC_GENERAL_LOCAL || channel == SRC_PARTY_LOCAL)
+        input.recentGeneralSection = FormatRecentGeneralTranscript(bot->GetZoneId());
+
+    if (g_EnableRAG && g_RAGSystem && !OllamaPromptComposer::IsSocialPresenceQuestion(playerMessage))
     {
         std::string ragQuery = OllamaPromptComposer::BuildRagQuery(playerMessage, ctx.botZone, ctx.botArea);
         auto results = g_RAGSystem->RetrieveRelevantInfo(

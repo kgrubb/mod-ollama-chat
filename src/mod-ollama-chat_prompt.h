@@ -72,6 +72,15 @@ struct BotContext
     uint8_t botRaceId = 0;
 };
 
+struct ChatIntent
+{
+    bool presenceQuestion = false;
+    bool partyInvite = false;
+    bool botReference = false;
+    bool directQuestion = false;
+    std::string referencedName;
+};
+
 struct ScenarioInput
 {
     std::string playerMessage;
@@ -83,15 +92,19 @@ struct ScenarioInput
     std::string environmentSection;
     std::string contextSection;
     std::string nearbySection;
+    std::string recentGeneralSection;
     std::string eventType;
     std::string eventDetail;
     std::string actorName;
     RandomIntent randomIntent = RandomIntent::ObserveZone;
     bool factualQuestion = false;
     ChatChannelSourceLocal chatChannel = SRC_UNDEFINED_LOCAL;
+    std::string verificationFeedback;
+    std::string intentTaskLines;
 
     std::string compactionExistingMemory;
-    std::string compactionEpisodicTurns;
+    std::string compactionEpisodicVerified;
+    std::string compactionEpisodicUnverified;
     std::string compactionPlayerName;
     float compactionSentiment = 0.5f;
 };
@@ -104,6 +117,7 @@ public:
     static PromptBundle Build(PromptScenario scenario, BotContext const& ctx, ScenarioInput const& input);
 
     static bool IsFactualQuestion(std::string const& message);
+    static bool IsSocialPresenceQuestion(std::string const& message);
     static std::string BuildRagQuery(std::string const& message, std::string const& zone, std::string const& area);
     static KnowledgeLevel RollKnowledgeLevel(BotContext const& ctx, std::vector<RAGResult> const& results);
     static std::string BuildKnowledgeSection(KnowledgeLevel level, std::string const& ragBullets);
@@ -114,11 +128,14 @@ std::string GetMemoryNudgeSystemPrompt();
 std::string GetMemoryCompactionSystemPrompt();
 std::string GetBotHistorySection(uint64_t botGuid, uint64_t playerGuid, std::string const& playerMessage);
 std::string GetBotCompactNearbySection(Player* bot);
+ChatIntent DetectChatIntent(std::string const& message, std::vector<std::string> const& referenceNames);
+std::string BuildIntentTaskLines(ChatIntent const& intent);
 void EnrichPromptBundle(PromptBundle& bundle, Player* bot, BotContext const& ctx,
     Player* playerOrNull, ChatChannelSourceLocal channel, bool randomAmbient = false);
 
 PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string const& playerMessage,
-    ChatChannelSourceLocal channel = SRC_UNDEFINED_LOCAL);
+    ChatChannelSourceLocal channel = SRC_UNDEFINED_LOCAL, ChatIntent const& intent = {},
+    std::string const& verificationFeedback = {});
 PromptBundle BuildRandomChatterPrompt(Player* bot, std::string const& environmentInfo, RandomIntent intent,
     ChatChannelSourceLocal channel = SRC_UNDEFINED_LOCAL);
 PromptBundle BuildEventReactionPrompt(Player* bot, Player* actorPlayer, std::string const& eventType,

@@ -1,5 +1,5 @@
 Merge memory. Reply only:
 [PROFILE]
-facts
+Player preferences only from verified exchanges. No personality archetypes.
 [HISTORY]
-story
+Dialogue snippets (Name: line). Unverified lines go in HISTORY only.

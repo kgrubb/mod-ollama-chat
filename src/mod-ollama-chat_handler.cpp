@@ -37,6 +37,7 @@
 #include "mod-ollama-chat_rag.h"
 #include "mod-ollama-chat_prompt.h"
 #include "mod-ollama-chat_sanitize.h"
+#include "mod-ollama-chat_verify.h"
 #include <iomanip>
 #include "SpellMgr.h"
 #include "SpellInfo.h"
@@ -374,10 +375,119 @@ bool DeliverGeneralChat(Player* bot, std::string const& line, Channel* channel)
 
     channel->Say(bot->GetGUID(), line, LANG_UNIVERSAL);
     MarkBotGeneralLine(line);
-    ProcessBotChatMessage(bot, line, SRC_GENERAL_LOCAL, channel);
+    AppendZoneGeneralTranscript(bot->GetZoneId(), bot->GetName(), line, true);
+    if (HumanActiveInZoneGeneralRecently(bot->GetZoneId()))
+        ProcessBotChatMessage(bot, line, SRC_GENERAL_LOCAL, channel);
     return true;
 }
 } // namespace
+
+namespace
+{
+constexpr size_t kGeneralTranscriptCap = 10;
+constexpr uint32_t kBotGeneralHumanActivityMinutes = 5;
+constexpr uint32_t kGeneralMaxBotsPerHumanMessage = 1;
+constexpr uint32_t kReplyVerificationMaxRetries = 1;
+
+struct GeneralTranscriptLine
+{
+    std::string speaker;
+    std::string text;
+};
+
+std::unordered_map<uint32_t, std::deque<GeneralTranscriptLine>> g_zoneGeneralTranscript;
+std::unordered_map<uint32_t, time_t> g_lastHumanGeneralTime;
+std::mutex g_zoneTranscriptMutex;
+
+void PruneHumanActivityLocked()
+{
+    time_t const cutoff = time(nullptr) - static_cast<time_t>(kBotGeneralHumanActivityMinutes * 60);
+    for (auto it = g_lastHumanGeneralTime.begin(); it != g_lastHumanGeneralTime.end();)
+    {
+        if (it->second < cutoff)
+            it = g_lastHumanGeneralTime.erase(it);
+        else
+            ++it;
+    }
+}
+} // namespace
+
+void AppendZoneGeneralTranscript(uint32_t zoneId, std::string const& speaker, std::string const& text, bool /*isBot*/)
+{
+    if (zoneId == 0 || speaker.empty() || text.empty())
+        return;
+    std::lock_guard<std::mutex> lock(g_zoneTranscriptMutex);
+    auto& dq = g_zoneGeneralTranscript[zoneId];
+    dq.push_back({ speaker, text });
+    while (dq.size() > kGeneralTranscriptCap)
+        dq.pop_front();
+}
+
+std::string FormatRecentGeneralTranscript(uint32_t zoneId, size_t maxLines)
+{
+    std::lock_guard<std::mutex> lock(g_zoneTranscriptMutex);
+    auto it = g_zoneGeneralTranscript.find(zoneId);
+    if (it == g_zoneGeneralTranscript.end() || it->second.empty())
+        return "";
+
+    auto const& dq = it->second;
+    size_t start = dq.size() > maxLines ? dq.size() - maxLines : 0;
+    std::ostringstream ss;
+    for (size_t i = start; i < dq.size(); ++i)
+    {
+        if (i > start)
+            ss << '\n';
+        ss << dq[i].speaker << ": " << dq[i].text;
+    }
+    return ss.str();
+}
+
+void MarkHumanGeneralActivity(uint32_t zoneId)
+{
+    if (zoneId == 0)
+        return;
+    std::lock_guard<std::mutex> lock(g_zoneTranscriptMutex);
+    g_lastHumanGeneralTime[zoneId] = time(nullptr);
+    PruneHumanActivityLocked();
+}
+
+bool HumanActiveInZoneGeneralRecently(uint32_t zoneId)
+{
+    if (zoneId == 0)
+        return false;
+    std::lock_guard<std::mutex> lock(g_zoneTranscriptMutex);
+    auto it = g_lastHumanGeneralTime.find(zoneId);
+    if (it == g_lastHumanGeneralTime.end())
+        return false;
+    return difftime(time(nullptr), it->second) <= static_cast<double>(kBotGeneralHumanActivityMinutes * 60);
+}
+
+static std::vector<std::string> CollectReferenceNames(Player* bot, std::vector<Player*> const& candidates)
+{
+    std::vector<std::string> names;
+    auto addName = [&](std::string const& n) {
+        if (n.empty())
+            return;
+        for (std::string const& existing : names)
+        {
+            if (existing == n)
+                return;
+        }
+        names.push_back(n);
+    };
+    if (bot)
+    {
+        GroupContext grp = BuildGroupContext(bot);
+        for (std::string const& n : grp.memberNames)
+            addName(n);
+    }
+    for (Player* p : candidates)
+    {
+        if (p)
+            addName(p->GetName());
+    }
+    return names;
+}
 
 bool TrySendGeneralChat(Player* bot, std::string& response, std::string const& triggerMsg, Channel* channel)
 {
@@ -388,21 +498,21 @@ bool TrySendGeneralChat(Player* bot, std::string& response, std::string const& t
     return DeliverGeneralChat(bot, response, channel);
 }
 
-void AppendBotConversation(uint64_t botGuid, uint64_t playerGuid, const std::string& playerMessage, const std::string& botReply, bool isEvent, ChatChannelSourceLocal channel, bool senderIsBot)
+void AppendBotConversation(uint64_t botGuid, uint64_t playerGuid, const std::string& playerMessage, const std::string& botReply, bool isEvent, ChatChannelSourceLocal channel, bool senderIsBot, bool verified)
 {
     if (channel == SRC_GENERAL_LOCAL && senderIsBot)
         return;
 
     if (g_EnableMemory)
     {
-        AppendBotMemoryTurn(botGuid, playerGuid, playerMessage, botReply, isEvent);
+        AppendBotMemoryTurn(botGuid, playerGuid, playerMessage, botReply, isEvent, verified);
         return;
     }
 
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
         auto& playerHistory = g_BotConversationHistory[botGuid][playerGuid];
-        playerHistory.push_back({ playerMessage, botReply });
+        playerHistory.push_back({ playerMessage, botReply, verified });
 
         while (playerHistory.size() > g_MaxConversationHistory)
             playerHistory.pop_front();
@@ -437,8 +547,8 @@ void SaveBotConversationHistoryToDB()
                     rows.push_back({
                         botGuid,
                         playerGuid,
-                        pair.first,
-                        pair.second
+                        pair.playerMessage,
+                        pair.botReply
                     });
                 }
             }
@@ -638,7 +748,7 @@ std::string GetBotHistoryPrompt(uint64_t botGuid, uint64_t playerGuid, std::stri
     if (!g_EnableChatHistory)
         return "";
 
-    std::deque<std::pair<std::string, std::string>> historyCopy;
+    std::deque<ConversationTurn> historyCopy;
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
 
@@ -676,8 +786,8 @@ std::string GetBotHistoryPrompt(uint64_t botGuid, uint64_t playerGuid, std::stri
     {
         result += SafeFormat(g_ChatHistoryLineTemplate,
             fmt::arg("player_name", playerName),
-            fmt::arg("player_message", entry.first),
-            fmt::arg("bot_reply", entry.second)
+            fmt::arg("player_message", entry.playerMessage),
+            fmt::arg("bot_reply", entry.botReply)
         );
     }
 
@@ -835,6 +945,7 @@ GroupContext BuildGroupContext(Player* bot)
         std::string line = fmt::format("{} (L{} {}, {})", member->GetName(), member->GetLevel(),
             FormatPlayerClass(member->getClass()), isBot ? "bot" : "player");
         party << "- " << line << "\n";
+        ctx.memberNames.push_back(member->GetName());
         if (rosterStarted)
             roster << ", ";
         roster << line;
@@ -1369,6 +1480,16 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
 
     if (senderIsBot && sourceLocal == SRC_GENERAL_LOCAL && IsBotGeneralLine(msg))
         return;
+
+    if (!senderIsBot && sourceLocal == SRC_GENERAL_LOCAL)
+    {
+        AppendZoneGeneralTranscript(player->GetZoneId(), player->GetName(), msg, false);
+        MarkHumanGeneralActivity(player->GetZoneId());
+    }
+
+    if (senderIsBot && sourceLocal == SRC_GENERAL_LOCAL &&
+        !HumanActiveInZoneGeneralRecently(player->GetZoneId()))
+        return;
     
     std::vector<Player*> eligibleBots;
     
@@ -1785,6 +1906,24 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                 }
             }
         }
+        else if (!senderIsBot && sourceLocal == SRC_GENERAL_LOCAL)
+        {
+            Player* nearest = nullptr;
+            float nearestDist = 1e9f;
+            for (Player* bot : candidateBots)
+            {
+                if (g_DisableRepliesInCombat && bot->IsInCombat())
+                    continue;
+                float dist = player->GetDistance(bot);
+                if (dist < nearestDist)
+                {
+                    nearestDist = dist;
+                    nearest = bot;
+                }
+            }
+            if (nearest)
+                finalCandidates.push_back(nearest);
+        }
         else
         {
             for (Player* bot : candidateBots)
@@ -1834,6 +1973,8 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
     uint32_t maxPick = g_MaxBotsToPick;
     if (senderIsBot && sourceLocal == SRC_GENERAL_LOCAL)
         maxPick = 1;
+    if (!senderIsBot && sourceLocal == SRC_GENERAL_LOCAL)
+        maxPick = kGeneralMaxBotsPerHumanMessage;
 
     if (finalCandidates.size() > maxPick)
     {
@@ -1875,15 +2016,16 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
         }
         uint64_t botGuid = bot->GetGUID().GetRawValue();
         std::string msgCopy = msg;
+        ChatIntent intent = DetectChatIntent(msgCopy, CollectReferenceNames(bot, candidateBots));
 
-        std::thread([botGuid, senderGuid, msgCopy, sourceLocal, channelId = (channel ? channel->GetChannelId() : 0), channelName = (channel ? channel->GetName() : "")]() {
+        std::thread([botGuid, senderGuid, msgCopy, sourceLocal, channelId = (channel ? channel->GetChannelId() : 0), channelName = (channel ? channel->GetName() : ""), intent]() {
             try {
                 Player* botPtr = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
                 Player* senderPtr = ObjectAccessor::FindPlayer(ObjectGuid(senderGuid));
                 if (!botPtr || !senderPtr)
                     return;
 
-                PromptBundle promptBundle = BuildPlayerChatPrompt(botPtr, senderPtr, msgCopy, sourceLocal);
+                PromptBundle promptBundle = BuildPlayerChatPrompt(botPtr, senderPtr, msgCopy, sourceLocal, intent);
 
                 if (g_DebugEnabled && g_DebugShowFullPrompt)
                 {
@@ -1897,6 +2039,17 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                     return;
                 }
                 std::string response = responseFuture.get();
+                bool firstPassVerified = true;
+
+                VerifyResult vr = VerifyReply(intent, msgCopy, response, sourceLocal);
+                if (!vr.pass && kReplyVerificationMaxRetries > 0)
+                {
+                    firstPassVerified = false;
+                    promptBundle = BuildPlayerChatPrompt(botPtr, senderPtr, msgCopy, sourceLocal, intent, vr.feedback);
+                    responseFuture = SubmitQuery(std::move(promptBundle));
+                    if (responseFuture.valid())
+                        response = responseFuture.get();
+                }
 
                 botPtr = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
                 senderPtr = ObjectAccessor::FindPlayer(ObjectGuid(senderGuid));
@@ -1927,8 +2080,8 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                     return;
                 }
                 
-                // Simulate typing delay if enabled
-                if (g_EnableTypingSimulation)
+                // Simulate typing delay if enabled (skip for General zone chat)
+                if (g_EnableTypingSimulation && sourceLocal != SRC_GENERAL_LOCAL)
                 {
                     uint32_t delay = g_TypingSimulationBaseDelay + (response.length() * g_TypingSimulationDelayPerChar);
                     if (g_DebugEnabled)
@@ -2106,7 +2259,7 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                 // Update sentiment based on the player's message
                 UpdateBotPlayerSentiment(botPtr, senderPtr, msgCopy);
 
-                AppendBotConversation(botGuid, senderGuid, msgCopy, response, false, sourceLocal, senderIsBot);
+                AppendBotConversation(botGuid, senderGuid, msgCopy, response, false, sourceLocal, senderIsBot, firstPassVerified);
                 if (botPtr->IsInWorld() && senderPtr->IsInWorld())
                 {
                     float respDistance = senderPtr->GetDistance(botPtr);

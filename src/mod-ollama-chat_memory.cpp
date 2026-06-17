@@ -2,7 +2,6 @@
 #include "mod-ollama-chat_config.h"
 #include "mod-ollama-chat_prompt.h"
 #include "mod-ollama-chat_api.h"
-#include "mod-ollama-chat_personality.h"
 #include "mod-ollama-chat_sentiment.h"
 #include "mod-ollama-chat-utilities.h"
 #include "Log.h"
@@ -126,10 +125,34 @@ static void FailCompaction(uint64_t botGuid, uint64_t playerGuid, uint32_t snaps
 
 constexpr char kProfileMarker[] = "[PROFILE]";
 constexpr char kHistoryMarker[] = "[HISTORY]";
+constexpr uint32_t kCompactionPreFlushTurns = 6;
+
+static void AppendDialogueTurn(std::ostringstream& out, std::string const& playerName,
+    std::string const& botName, ConversationTurn const& turn, bool tagUnverified)
+{
+    out << playerName << ": " << turn.playerMessage << "\n";
+    out << botName << ": " << turn.botReply;
+    if (tagUnverified && !turn.verified)
+        out << " (unverified)";
+    out << "\n";
+}
+
+static bool HasRecallCue(std::string const& query)
+{
+    std::string lower = query;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    static char const* kCues[] = { "remember", "last time", "earlier", "you said", "recall" };
+    for (char const* cue : kCues)
+    {
+        if (lower.find(cue) != std::string::npos)
+            return true;
+    }
+    return false;
+}
 
 constexpr char kPromptTemplate[] =
     "Memory of {player_name}:\n"
-    "Profile:\n{profile}\n\nShared history:\n{history}{past_recall}\n"
+    "Profile:\n{profile}\n\nRecent chat:\n{history}{past_recall}\n"
     "Use only memories listed here.";
 
 static std::string BuildNudgeUserPrompt(std::string const& profile, std::string const& history, std::string const& recent)
@@ -253,6 +276,16 @@ static std::string RetrieveRelevantMemory(const std::string& query, const std::s
     return r;
 }
 
+static bool ShouldInjectSemanticMemory(std::string const& query, MemorySections const& sections)
+{
+    if (HasRecallCue(query))
+        return true;
+    if (sections.history.empty())
+        return false;
+    return !RetrieveRelevantMemory(
+        query, sections.history, OllamaMemory::RecallMaxItems, OllamaMemory::RecallThreshold).empty();
+}
+
 static std::string TruncateMemory(const std::string& text, uint32_t maxChars)
 {
     if (text.size() <= maxChars)
@@ -358,8 +391,8 @@ static std::string BuildArchiveRecall(uint64_t botGuid, uint64_t playerGuid, std
                 {
                     uint32_t wm = GetWatermark(botGuid, playerGuid);
                     for (size_t i = wm; i < pit->second.size(); ++i)
-                        candidates << "Player: " << pit->second[i].first
-                                   << "\nBot: " << pit->second[i].second << "\n";
+                        candidates << "Player: " << pit->second[i].playerMessage
+                                   << "\nBot: " << pit->second[i].botReply << "\n";
                 }
             }
         }
@@ -492,13 +525,10 @@ static bool ShouldCompactUnlocked(uint64_t botGuid, uint64_t playerGuid)
 
 static void RunCompaction(uint64_t botGuid, uint64_t playerGuid)
 {
-    std::string playerName;
+    std::vector<ConversationTurn> turns;
     std::string existingMemory;
-    std::string episodicBlock;
     uint32_t pendingCount = 0;
     uint32_t snapshotWm = 0;
-    std::string personalityName;
-    std::string personalityPrompt;
     float sentiment = g_SentimentDefaultValue;
 
     {
@@ -516,37 +546,35 @@ static void RunCompaction(uint64_t botGuid, uint64_t playerGuid)
             return;
 
         pendingCount = static_cast<uint32_t>(dequeSize - snapshotWm);
-        std::ostringstream ep;
-        for (size_t i = snapshotWm; i < dequeSize; ++i)
-        {
-            ep << "Player: " << playerIt->second[i].first << "\nBot: " << playerIt->second[i].second << "\n";
-        }
-        episodicBlock = ep.str();
+        size_t flushStart = dequeSize > kCompactionPreFlushTurns ? dequeSize - kCompactionPreFlushTurns : 0;
+        size_t blockStart = std::min(static_cast<size_t>(snapshotWm), flushStart);
+        turns.assign(playerIt->second.begin() + static_cast<std::ptrdiff_t>(blockStart), playerIt->second.end());
         existingMemory = GetSemanticText(botGuid, playerGuid);
     }
 
     Player* bot = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
     Player* player = ObjectAccessor::FindPlayer(ObjectGuid(playerGuid));
-    if (player)
-        playerName = player->GetName();
-    else
-        playerName = "Player";
+    std::string playerName = player ? player->GetName() : "Player";
+    std::string botName = bot ? bot->GetName() : "Bot";
 
-    if (bot)
+    if (bot && g_EnableSentimentTracking)
+        sentiment = GetBotPlayerSentiment(botGuid, playerGuid);
+
+    std::ostringstream verifiedBlock;
+    std::ostringstream unverifiedBlock;
+    for (ConversationTurn const& turn : turns)
     {
-        personalityName = GetBotPersonality(bot);
-        personalityPrompt = GetPersonalityPromptAddition(personalityName);
-        if (g_EnableSentimentTracking)
-            sentiment = GetBotPlayerSentiment(botGuid, playerGuid);
+        if (turn.verified)
+            AppendDialogueTurn(verifiedBlock, playerName, botName, turn, false);
+        else
+            AppendDialogueTurn(unverifiedBlock, playerName, botName, turn, true);
     }
 
     BotContext ctx;
-    ctx.personalityKey = personalityName;
-    ctx.personalityLine = personalityPrompt;
-
     ScenarioInput input;
     input.compactionExistingMemory = existingMemory.empty() ? "(none)" : existingMemory;
-    input.compactionEpisodicTurns = episodicBlock;
+    input.compactionEpisodicVerified = verifiedBlock.str();
+    input.compactionEpisodicUnverified = unverifiedBlock.str();
     input.compactionPlayerName = playerName;
     input.compactionSentiment = sentiment;
 
@@ -657,7 +685,7 @@ static void RunNudge(uint64_t botGuid, uint64_t playerGuid)
         size_t from = pairIt->second.size() > 3 ? pairIt->second.size() - 3 : 0;
         std::ostringstream ep;
         for (size_t i = from; i < pairIt->second.size(); ++i)
-            ep << "Player: " << pairIt->second[i].first << "\nBot: " << pairIt->second[i].second << "\n";
+            ep << "Player: " << pairIt->second[i].playerMessage << "\nBot: " << pairIt->second[i].botReply << "\n";
         recent = ep.str();
         if (recent.empty())
             return;
@@ -892,7 +920,7 @@ static void LoadBotMemoryFromDB()
                     std::string ctx = (*epResult)[2].Get<std::string>();
                     std::string reply = (*epResult)[3].Get<std::string>();
                     time_t ts = (*epResult)[4].IsNull() ? time(nullptr) : static_cast<time_t>((*epResult)[4].Get<uint64_t>());
-                    g_BotConversationHistory[botGuid][playerGuid].push_back({ ctx, reply });
+                    g_BotConversationHistory[botGuid][playerGuid].push_back({ ctx, reply, true });
                     g_TurnTimestamps[botGuid][playerGuid].push_back(ts);
 
                     auto& hist = g_BotConversationHistory[botGuid][playerGuid];
@@ -930,7 +958,7 @@ static void LoadBotMemoryFromDB()
                 std::string playerMsg = (*legacy)[2].Get<std::string>();
                 std::string botReply = (*legacy)[3].Get<std::string>();
                 time_t ts = (*legacy)[4].IsNull() ? time(nullptr) : static_cast<time_t>((*legacy)[4].Get<uint64_t>());
-                hist.push_back({ playerMsg, botReply });
+                hist.push_back({ playerMsg, botReply, true });
                 g_TurnTimestamps[botGuid][playerGuid].push_back(ts);
                 g_CompactedTurnCount[botGuid][playerGuid] = 0;
 
@@ -1036,7 +1064,7 @@ bool SaveBotMemoryToDB(bool blocking)
                     row.playerGuid = playerGuid;
                     row.pendingTurns.reserve(hist.size() - wm);
                     for (size_t i = wm; i < hist.size(); ++i)
-                        row.pendingTurns.push_back(hist[i]);
+                        row.pendingTurns.push_back({ hist[i].playerMessage, hist[i].botReply });
                     episodicRows.push_back(std::move(row));
                 }
             }
@@ -1198,14 +1226,14 @@ void MaybeEnqueueMemoryNudge(uint64_t botGuid, uint64_t playerGuid, std::string 
 }
 
 void AppendBotMemoryTurn(uint64_t botGuid, uint64_t playerGuid, std::string const& playerMessage,
-    std::string const& botReply, bool isEvent)
+    std::string const& botReply, bool isEvent, bool verified)
 {
     std::vector<std::pair<std::string, std::string>> toFlush;
 
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
         auto& hist = g_BotConversationHistory[botGuid][playerGuid];
-        hist.push_back({ playerMessage, botReply });
+        hist.push_back({ playerMessage, botReply, verified });
         g_TurnTimestamps[botGuid][playerGuid].push_back(time(nullptr));
         g_ArchivePending[botGuid][playerGuid].push_back({ playerMessage, botReply });
 
@@ -1310,6 +1338,9 @@ std::string GetMemoryPromptAddition(uint64_t botGuid, uint64_t playerGuid, const
     }
 
     MemorySections sections = ParseMemorySections(blob);
+    if (!ShouldInjectSemanticMemory(query, sections))
+        return "";
+
     std::string profile = sections.profile;
     std::string history = sections.history;
 
