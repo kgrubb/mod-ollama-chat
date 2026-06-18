@@ -919,15 +919,6 @@ OllamaChat.RAGPromptTemplate = "RELEVANT INFORMATION:\n{rag_info}\nUse this info
 #     Default: 0 (false)
 OllamaChat.EnableMemory = 0
 
-# OllamaChat.PersistEpisodicMemory
-#     Description: Persist memory turns to the database.
-#     Default: 1 (true)
-OllamaChat.PersistEpisodicMemory = 1
-
-# OllamaChat.MemoryCompactionPrompt
-#     Description: LLM prompt for memory compaction. Empty uses built-in default.
-OllamaChat.MemoryCompactionPrompt =
-
 # --------------------------------------------
 # PROMPT COMPOSER
 # --------------------------------------------

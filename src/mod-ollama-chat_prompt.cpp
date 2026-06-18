@@ -34,8 +34,7 @@ std::string g_SentimentTask;
 std::string g_HedgeSection;
 std::string g_VagueKnowledgeSection;
 std::string g_FactualHintSection;
-std::string g_MemoryNudgeTask;
-std::string g_MemoryCompactionTask;
+std::string g_MemoryMaintenanceTask;
 bool g_PromptFilesLoaded = false;
 std::string g_ChannelGeneral;
 std::string g_ChannelGeneralRandom;
@@ -388,10 +387,8 @@ void OllamaPromptComposer::LoadPromptFiles()
          "You vaguely remember:");
     load("sections/factual_hint.txt", g_FactualHintSection,
          "Answer the factual question directly or admit uncertainty.");
-    load("memory_nudge.txt", g_MemoryNudgeTask,
-         "Update memory. Format:\n[PROFILE]\nfacts\n[HISTORY]\nstory");
-    load("memory_compaction.txt", g_MemoryCompactionTask,
-         "Merge memory. Format:\n[PROFILE]\nfacts\n[HISTORY]\nstory");
+    load("memory_flush.txt", g_MemoryMaintenanceTask,
+         "Update player memory from chat. Reply only.\n[FACTS]\nOne fact per line.\n[NOTES]\nPlayer preferences only.");
     load("channels/general.txt", g_ChannelGeneral, "");
     load("channels/general_random.txt", g_ChannelGeneralRandom, "");
 
@@ -401,18 +398,11 @@ void OllamaPromptComposer::LoadPromptFiles()
     g_PromptFilesLoaded = true;
 }
 
-std::string GetMemoryNudgeSystemPrompt()
+std::string GetMemoryMaintenanceSystemPrompt()
 {
     if (!g_PromptFilesLoaded)
         OllamaPromptComposer::LoadPromptFiles();
-    return g_MemoryNudgeTask;
-}
-
-std::string GetMemoryCompactionSystemPrompt()
-{
-    if (!g_PromptFilesLoaded)
-        OllamaPromptComposer::LoadPromptFiles();
-    return g_MemoryCompactionTask;
+    return g_MemoryMaintenanceTask;
 }
 
 BotContext OllamaPromptComposer::GatherBotContext(Player* bot, Player* playerOrNull)
@@ -638,18 +628,13 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
         return bundle;
     }
 
-    if (scenario == PromptScenario::MemoryCompaction)
+    if (scenario == PromptScenario::MemoryMaintenance)
     {
-        bundle.system = g_MemoryCompactionPrompt.empty()
-            ? GetMemoryCompactionSystemPrompt()
-            : g_MemoryCompactionPrompt;
+        bundle.system = GetMemoryMaintenanceSystemPrompt();
         std::ostringstream u;
-        u << "Existing:\n" << input.compactionExistingMemory << "\n\n";
-        if (!input.compactionEpisodicVerified.empty())
-            u << "Verified turns (PROFILE + HISTORY):\n" << input.compactionEpisodicVerified << "\n\n";
-        if (!input.compactionEpisodicUnverified.empty())
-            u << "Unverified turns (HISTORY only):\n" << input.compactionEpisodicUnverified << "\n\n";
-        u << "Player: " << input.compactionPlayerName << " Sentiment: " << input.compactionSentiment;
+        u << "Facts:\n" << (input.maintenanceFacts.empty() ? "(none)" : input.maintenanceFacts) << "\n\n";
+        u << "Notes:\n" << (input.maintenanceNotes.empty() ? "(none)" : input.maintenanceNotes) << "\n\n";
+        u << "Turns:\n" << input.maintenanceTurns;
         bundle.user = u.str();
         return bundle;
     }
@@ -666,7 +651,13 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
         AppendSection(user, "Context", input.contextSection);
 
     if (!ctx.personalityLine.empty())
-        AppendSection(user, "Personality", ctx.personalityKey + ": " + ctx.personalityLine);
+    {
+        bool const general = input.chatChannel == SRC_GENERAL_LOCAL;
+        std::string persona = (general || ctx.personalityKey.empty())
+            ? ctx.personalityLine
+            : ctx.personalityKey + ": " + ctx.personalityLine;
+        AppendSection(user, "Personality", persona);
+    }
 
     if (!input.sentimentSection.empty())
         AppendSection(user, "Sentiment", input.sentimentSection);
@@ -860,7 +851,7 @@ PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string cons
         input.sentimentSection = GetSentimentPromptAddition(bot, player);
 
     if (g_EnableMemory && !skipContext)
-        input.memorySection = GetMemoryPromptAddition(botGuid, playerGuid, playerMessage, player->GetName());
+        input.memorySection = GetMemoryPromptAddition(botGuid, playerGuid, channel, playerMessage, player->GetName());
 
     if (channel == SRC_GENERAL_LOCAL)
         input.recentGeneralSection = FormatRecentGeneralTranscript(bot->GetZoneId());
@@ -957,6 +948,7 @@ PromptBundle BuildEventReactionPrompt(Player* bot, Player* actorPlayer, std::str
         input.memorySection = GetMemoryPromptAddition(
             bot->GetGUID().GetRawValue(),
             actorPlayer->GetGUID().GetRawValue(),
+            channel,
             query,
             actorPlayer->GetName());
     }

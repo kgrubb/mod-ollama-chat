@@ -46,7 +46,7 @@
 
   Bots now recall your recent interactions—responses will reflect the last several lines of chat with each player.
 
-- **Long-Term Bot Memory:** Optional per bot-player semantic memory with LLM compaction and relevance-based recall (`OllamaChat.EnableMemory`).
+- **Long-Term Bot Memory:** Per bot-player memory with facts, notes, and episodic recall (`OllamaChat.EnableMemory`).
 
 - **Blacklist for Playerbot Commands:**  
   A configurable blacklist prevents bots from responding to chat messages that start with common playerbot command prefixes, ensuring that administrative commands are not inadvertently processed. Additional commands can be appended via the configuration.
@@ -214,7 +214,7 @@ Optional long-term bot-player memory. Set `OllamaChat.EnableMemory = 1`, then `.
 - **Usage:**
   - `.ollama memory view [bot] [player]` — inspect memory
   - `.ollama memory reset [bot] [player]` — clear RAM and DB
-  - `.ollama memory compact <bot> <player>` — queue compaction
+  - `.ollama memory compact <bot> <player>` — queue maintenance
 - Bot and player accept online names or numeric GUIDs. See `conf/mod_ollama_chat.conf.dist` and `src/mod-ollama-chat_memory.h` for other settings.
 - **Console Equivalent:** `ollama memory view|reset|compact ...`
 

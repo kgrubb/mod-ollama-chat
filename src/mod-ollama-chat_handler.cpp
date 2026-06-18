@@ -384,9 +384,9 @@ bool DeliverGeneralChat(Player* bot, std::string const& line, Channel* channel)
 
 namespace
 {
-constexpr size_t kGeneralTranscriptCap = 10;
+constexpr size_t kGeneralTranscriptCap = 12;
 constexpr uint32_t kBotGeneralHumanActivityMinutes = 5;
-constexpr uint32_t kGeneralMaxBotsPerHumanMessage = 1;
+constexpr uint32_t kGeneralMaxBotsPerHumanMessage = 2;
 constexpr uint32_t kReplyVerificationMaxRetries = 1;
 
 struct GeneralTranscriptLine
@@ -568,6 +568,7 @@ void SaveBotConversationHistoryToDB()
         }
     }
 
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
     for (auto const& row : rows)
     {
         std::string escPlayerMsg = row.playerMessage;
@@ -576,11 +577,21 @@ void SaveBotConversationHistoryToDB()
         std::string escBotReply = row.botReply;
         CharacterDatabase.EscapeString(escBotReply);
 
-        CharacterDatabase.Execute(SafeFormat(
+        trans->Append(SafeFormat(
             "INSERT IGNORE INTO mod_ollama_chat_history (bot_guid, player_guid, timestamp, player_message, bot_reply) "
             "VALUES ({}, {}, NOW(), '{}', '{}')",
             row.botGuid, row.playerGuid, escPlayerMsg, escBotReply));
     }
+    if (trans->GetSize() > 0)
+        CharacterDatabase.CommitTransaction(trans);
+
+    // The window-function cleanup delete is much heavier than the inserts, so run
+    // it at most once per hour rather than on every save.
+    static time_t lastHistoryCleanup = 0;
+    time_t nowCleanup = time(nullptr);
+    if (lastHistoryCleanup != 0 && difftime(nowCleanup, lastHistoryCleanup) < 3600.0)
+        return;
+    lastHistoryCleanup = nowCleanup;
 
     std::string cleanupQuery = R"SQL(
         WITH ranked_history AS (
@@ -1401,7 +1412,7 @@ std::string GenerateBotPrompt(Player* bot, std::string const& playerMessage, Pla
 
     if (g_EnableMemory)
     {
-        std::string memory = GetMemoryPromptAddition(botGuid, playerGuid, playerMessage, playerName);
+        std::string memory = GetMemoryPromptAddition(botGuid, playerGuid, SRC_UNDEFINED_LOCAL, playerMessage, playerName);
         if (!memory.empty())
             prompt += memory + "\n";
     }
@@ -1932,7 +1943,21 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                 }
             }
             if (nearest)
+            {
                 finalCandidates.push_back(nearest);
+                if (candidateBots.size() > 1)
+                {
+                    for (uint32_t i = 0; i < 8; ++i)
+                    {
+                        Player* other = candidateBots[urand(0, static_cast<uint32_t>(candidateBots.size()) - 1)];
+                        if (other != nearest && !(g_DisableRepliesInCombat && other->IsInCombat()))
+                        {
+                            finalCandidates.push_back(other);
+                            break;
+                        }
+                    }
+                }
+            }
         }
         else
         {

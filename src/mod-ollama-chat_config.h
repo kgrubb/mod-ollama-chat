@@ -244,8 +244,7 @@ extern time_t g_LastSentimentSaveTime;
 // --------------------------------------------
 enum class MemoryJobType : uint8_t
 {
-    Compact = 0,
-    Nudge = 1
+    Maintenance = 0
 };
 
 struct MemoryJob
@@ -256,18 +255,13 @@ struct MemoryJob
 };
 
 extern bool        g_EnableMemory;
-extern bool        g_PersistEpisodicMemory;
-extern std::string g_MemoryCompactionPrompt;
 
-extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::string>> g_SemanticMemory;
 extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, uint32_t>> g_CompactedTurnCount;
 extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::deque<time_t>>> g_TurnTimestamps;
-extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, time_t>> g_LastNudgeTime;
-extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::vector<std::pair<std::string, std::string>>>> g_ArchivePending;
-extern std::deque<MemoryJob> g_MemoryCompactionQueue;
-extern std::unordered_set<uint64_t> g_MemoryCompactionPending;
+extern std::deque<MemoryJob> g_MemoryMaintenanceQueue;
+extern std::unordered_set<uint64_t> g_MemoryMaintenancePending;
 extern std::mutex g_MemoryQueueMutex;
-extern std::atomic<uint32_t> g_MemoryCompactionInFlight;
+extern std::atomic<uint32_t> g_MemoryMaintenanceInFlight;
 extern time_t g_LastMemorySaveTime;
 
 // --------------------------------------------

@@ -13,65 +13,12 @@ namespace
 char const* kGeneralCasualPrompt =
     "Casual Wrath zone chat: first person, abbreviations OK, never wiki-tone or narration.";
 
-bool ShouldClampGeneralPersonality(std::string const& key)
-{
-    static char const* kClamp[] = {
-        "NPC_IMPERSONATOR", "MENTOR", "SCHOLAR", "BARD", "ANCIENT_WISE_ONE",
-        "HEROIC_LEADER", "POET", "GLITCHED_AI", "ROLEPLAYER"
-    };
-    for (char const* k : kClamp)
-    {
-        if (key == k)
-            return true;
-    }
-    return false;
-}
-
-std::string GetPersonalityToneHint(std::string const& key)
-{
-    static char const* kHints[][2] = {
-        { "TRICKSTER", "wry and sarcastic" },
-        { "GAMER", "min-max and efficiency focused" },
-        { "GOBLIN_MERCHANT", "greedy and business-minded" },
-        { "CASUAL", "relaxed and friendly" },
-        { "GRUMPY_VETERAN", "grumpy but helpful" },
-        { "LOOTGOBLIN", "loot and gold obsessed" },
-        { "PVP_HARDCORE", "pvp focused" },
-        { "RAIDER", "raid focused" },
-        { "TRADER", "economy focused" },
-        { "LONE_WOLF", "short and direct" },
-        { "FOOL", "clueless but eager" },
-        { "CONSPIRACY_THEORIST", "suspicious of rumors" },
-        { "EDGE_LORD", "dark and brooding" },
-        { "FANATIC", "faction obsessed" },
-        { "HYPE_MAN", "overhyped" },
-        { "PARANOID", "paranoid" },
-        { "FLIRT", "flirty" },
-        { "RAGER", "angry" },
-        { "STONER", "chill" },
-        { "YOUNG_APPRENTICE", "eager newbie" },
-        { "WANNABE_VILLAIN", "villain vibes" },
-        { "JOLLY_BEER_LOVER", "drunk dwarf vibes" },
-        { "PIRATE", "pirate slang" },
-        { "CHEF", "food obsessed" },
-    };
-    for (auto const& row : kHints)
-    {
-        if (key == row[0])
-            return std::string("Tone hint: ") + row[1] + ". Answer the ask first; flavor second.";
-    }
-    return "Tone hint: stay in character lightly. Answer the ask first; flavor second.";
-}
 } // namespace
 
 std::string GetPersonalityPromptForChannel(const std::string& type, ChatChannelSourceLocal channel)
 {
     if (channel == SRC_GENERAL_LOCAL)
-    {
-        if (ShouldClampGeneralPersonality(type))
-            return kGeneralCasualPrompt;
-        return GetPersonalityToneHint(type);
-    }
+        return kGeneralCasualPrompt;
     return GetPersonalityPromptAddition(type);
 }
 

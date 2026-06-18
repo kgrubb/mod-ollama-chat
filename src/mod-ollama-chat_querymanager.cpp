@@ -1,12 +1,23 @@
 #include "mod-ollama-chat_querymanager.h"
 #include "mod-ollama-chat_config.h"
 #include "mod-ollama-chat_api.h"
+#include "mod-ollama-chat_memory.h"
 #include <thread>
 #include <utility>
 
 QueryManager::QueryManager()
     : maxConcurrentQueries(g_MaxConcurrentQueries), currentQueries(0)
 {
+}
+
+bool QueryManager::ShouldDeferMemoryWork()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (static_cast<uint32_t>(taskQueue.size()) >= OllamaMemory::DeferQueueThreshold)
+        return true;
+    if (maxConcurrentQueries > 0 && currentQueries >= maxConcurrentQueries)
+        return true;
+    return false;
 }
 
 void QueryManager::setMaxConcurrentQueries(int maxQueries) {

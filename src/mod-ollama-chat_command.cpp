@@ -554,13 +554,13 @@ bool OllamaChatConfigCommand::HandleOllamaMemoryCompactCommand(ChatHandler* hand
     switch (EnqueueMemoryCompaction(botGuid, playerGuid, true))
     {
         case MemoryCompactionEnqueueResult::Enqueued:
-            handler->SendSysMessage("OllamaChat: Compaction queued.");
+            handler->SendSysMessage("OllamaChat: Maintenance queued.");
             break;
         case MemoryCompactionEnqueueResult::AlreadyPending:
-            handler->SendSysMessage("OllamaChat: Compaction already queued.");
+            handler->SendSysMessage("OllamaChat: Maintenance already queued.");
             break;
         default:
-            handler->SendSysMessage("OllamaChat: Nothing to compact.");
+            handler->SendSysMessage("OllamaChat: Nothing to maintain.");
             break;
     }
     return true;

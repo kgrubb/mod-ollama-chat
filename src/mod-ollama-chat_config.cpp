@@ -150,18 +150,13 @@ time_t g_LastSentimentSaveTime = 0;
 // Bot-Player Long-Term Memory
 // --------------------------------------------
 bool        g_EnableMemory = false;
-bool        g_PersistEpisodicMemory = true;
-std::string g_MemoryCompactionPrompt;
 
-std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::string>> g_SemanticMemory;
 std::unordered_map<uint64_t, std::unordered_map<uint64_t, uint32_t>> g_CompactedTurnCount;
 std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::deque<time_t>>> g_TurnTimestamps;
-std::unordered_map<uint64_t, std::unordered_map<uint64_t, time_t>> g_LastNudgeTime;
-std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::vector<std::pair<std::string, std::string>>>> g_ArchivePending;
-std::deque<MemoryJob> g_MemoryCompactionQueue;
-std::unordered_set<uint64_t> g_MemoryCompactionPending;
+std::deque<MemoryJob> g_MemoryMaintenanceQueue;
+std::unordered_set<uint64_t> g_MemoryMaintenancePending;
 std::mutex g_MemoryQueueMutex;
-std::atomic<uint32_t> g_MemoryCompactionInFlight{0};
+std::atomic<uint32_t> g_MemoryMaintenanceInFlight{0};
 time_t g_LastMemorySaveTime = 0;
 
 // --------------------------------------------
@@ -517,8 +512,6 @@ void LoadOllamaChatConfig()
     g_SentimentPromptTemplate         = sConfigMgr->GetOption<std::string>("OllamaChat.SentimentPromptTemplate", "Your relationship sentiment with {player_name} is {sentiment_value} (0.0=hostile, 0.5=neutral, 1.0=friendly). Use this to guide your tone and response.");
 
     g_EnableMemory                    = sConfigMgr->GetOption<bool>("OllamaChat.EnableMemory", false);
-    g_PersistEpisodicMemory           = sConfigMgr->GetOption<bool>("OllamaChat.PersistEpisodicMemory", true);
-    g_MemoryCompactionPrompt          = sConfigMgr->GetOption<std::string>("OllamaChat.MemoryCompactionPrompt", "");
 
     // RAG (Retrieval-Augmented Generation) System
     g_EnableRAG                       = sConfigMgr->GetOption<bool>("OllamaChat.EnableRAG", false);
@@ -815,6 +808,13 @@ void OllamaChatConfigWorldScript::OnStartup()
         LoadBotConversationHistoryFromDB();
     InitializeSentimentTracking();
     InitializeBotMemory();
+
+    // Phase-shift sentiment flushes off the memory and history boundary so the two
+    // periodic saves do not compound into a single write spike.
+    time_t const now = time(nullptr);
+    g_LastMemorySaveTime    = now;
+    g_LastHistorySaveTime   = now;
+    g_LastSentimentSaveTime = now - static_cast<time_t>(g_SentimentSaveInterval) * 60 / 2;
 
     if (g_Enable)
         ValidateOllamaModel();

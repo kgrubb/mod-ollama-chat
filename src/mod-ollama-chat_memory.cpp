@@ -2,11 +2,11 @@
 #include "mod-ollama-chat_config.h"
 #include "mod-ollama-chat_prompt.h"
 #include "mod-ollama-chat_api.h"
-#include "mod-ollama-chat_sentiment.h"
 #include "mod-ollama-chat-utilities.h"
 #include "Log.h"
 #include "DatabaseEnv.h"
 #include "ObjectAccessor.h"
+#include "Player.h"
 #include <fmt/core.h>
 #include <algorithm>
 #include <unordered_map>
@@ -19,6 +19,8 @@
 #include <set>
 #include <mutex>
 #include <utility>
+#include <cmath>
+#include <deque>
 
 static bool MemoryCommit(CharacterDatabaseTransaction const& trans, char const* op)
 {
@@ -34,6 +36,15 @@ static bool MemoryCommit(CharacterDatabaseTransaction const& trans, char const* 
     return true;
 }
 
+// Fire-and-forget commit. Never blocks, so it is safe to call on the world thread.
+static void MemoryCommitAsync(CharacterDatabaseTransaction const& trans)
+{
+    if (!trans || trans->GetSize() == 0)
+        return;
+
+    CharacterDatabase.CommitTransaction(trans);
+}
+
 static bool MemoryExecute(std::string const& sql, char const* op)
 {
     if (sql.empty())
@@ -47,9 +58,46 @@ static bool MemoryExecute(std::string const& sql, char const* op)
     return MemoryCommit(trans, op);
 }
 
-namespace
+static void TrimArchivePair(uint64_t botGuid, uint64_t playerGuid);
+static void InsertArchiveTurnsToDB(uint64_t botGuid, uint64_t playerGuid,
+    std::vector<std::pair<std::string, std::string>> const& turns);
+static void LoadPairFromDB(uint64_t botGuid, uint64_t playerGuid);
+
+struct ArchiveTurn
 {
-using ScoredLine = std::pair<std::string, float>;
+    std::string playerMsg;
+    std::string botReply;
+    time_t at = 0;
+};
+
+struct PairMemoryState
+{
+    std::string facts;
+    std::string notes;
+    std::string playerName;
+    std::deque<ArchiveTurn> archiveRing;
+    time_t lastPlayerAt = 0;
+    time_t cacheLastUsed = 0;
+    time_t lastMaintenanceAt = 0;
+};
+
+std::unordered_map<uint64_t, std::unordered_map<uint64_t, PairMemoryState>> g_PairMemory;
+std::deque<std::pair<uint64_t, uint64_t>> g_PairLoadQueue;
+std::unordered_set<uint64_t> g_PairLoadPending;
+
+std::unordered_map<uint64_t, std::unordered_map<uint64_t, time_t>> g_MaintenanceFailCooldownUntil;
+std::mutex g_MaintenanceFailCooldownMutex;
+
+constexpr char kFactsMarker[] = "[FACTS]";
+constexpr char kNotesMarker[] = "[NOTES]";
+constexpr char kProfileMarker[] = "[PROFILE]";
+constexpr char kHistoryMarker[] = "[HISTORY]";
+
+constexpr char kPromptTemplate[] =
+    "Memory of {name}:\n"
+    "Facts: {facts}\n"
+    "{notes_line}"
+    "{past_section}";
 
 uint64_t MemoryPairKey(uint64_t botGuid, uint64_t playerGuid)
 {
@@ -61,24 +109,14 @@ uint64_t MemoryJobKey(MemoryJobType type, uint64_t botGuid, uint64_t playerGuid)
     return MemoryPairKey(botGuid, playerGuid) ^ (static_cast<uint64_t>(type) << 32);
 }
 
-struct MemorySections
-{
-    std::string profile;
-    std::string history;
-};
-
-std::unordered_map<uint64_t, std::unordered_map<uint64_t, time_t>> g_CompactionCooldownUntil;
-std::mutex g_CompactionCooldownMutex;
-
 static uint32_t GetWatermark(uint64_t botGuid, uint64_t playerGuid);
 static void SetWatermark(uint64_t botGuid, uint64_t playerGuid, uint32_t count);
-static std::string GetSemanticText(uint64_t botGuid, uint64_t playerGuid);
 
-static bool IsCompactionOnCooldown(uint64_t botGuid, uint64_t playerGuid)
+static bool IsMaintenanceFailCooldown(uint64_t botGuid, uint64_t playerGuid)
 {
-    std::lock_guard<std::mutex> lock(g_CompactionCooldownMutex);
-    auto botIt = g_CompactionCooldownUntil.find(botGuid);
-    if (botIt == g_CompactionCooldownUntil.end())
+    std::lock_guard<std::mutex> lock(g_MaintenanceFailCooldownMutex);
+    auto botIt = g_MaintenanceFailCooldownUntil.find(botGuid);
+    if (botIt == g_MaintenanceFailCooldownUntil.end())
         return false;
     auto playerIt = botIt->second.find(playerGuid);
     if (playerIt == botIt->second.end())
@@ -86,46 +124,100 @@ static bool IsCompactionOnCooldown(uint64_t botGuid, uint64_t playerGuid)
     return time(nullptr) < playerIt->second;
 }
 
-static void SetCompactionCooldown(uint64_t botGuid, uint64_t playerGuid)
+static void SetMaintenanceFailCooldown(uint64_t botGuid, uint64_t playerGuid)
 {
-    std::lock_guard<std::mutex> lock(g_CompactionCooldownMutex);
-    g_CompactionCooldownUntil[botGuid][playerGuid] =
+    std::lock_guard<std::mutex> lock(g_MaintenanceFailCooldownMutex);
+    g_MaintenanceFailCooldownUntil[botGuid][playerGuid] =
         time(nullptr) + static_cast<time_t>(OllamaMemory::CompactionFailCooldownSeconds);
 }
 
-static void ClearCompactionCooldown(uint64_t botGuid, uint64_t playerGuid)
+static void ClearMaintenanceFailCooldown(uint64_t botGuid, uint64_t playerGuid)
 {
-    std::lock_guard<std::mutex> lock(g_CompactionCooldownMutex);
-    auto botIt = g_CompactionCooldownUntil.find(botGuid);
-    if (botIt != g_CompactionCooldownUntil.end())
+    std::lock_guard<std::mutex> lock(g_MaintenanceFailCooldownMutex);
+    auto botIt = g_MaintenanceFailCooldownUntil.find(botGuid);
+    if (botIt != g_MaintenanceFailCooldownUntil.end())
         botIt->second.erase(playerGuid);
 }
 
-static void AdvanceCompactionWatermark(uint64_t botGuid, uint64_t playerGuid, uint32_t snapshotWm, uint32_t pendingCount)
+static std::string TruncateMemory(std::string const& text, uint32_t maxChars)
 {
-    std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-    auto botIt = g_BotConversationHistory.find(botGuid);
-    if (botIt == g_BotConversationHistory.end())
-        return;
-    auto playerIt = botIt->second.find(playerGuid);
-    if (playerIt == botIt->second.end())
-        return;
-
-    uint32_t newWm = std::min(snapshotWm + pendingCount, static_cast<uint32_t>(playerIt->second.size()));
-    SetWatermark(botGuid, playerGuid, newWm);
+    if (text.size() <= maxChars)
+        return text;
+    return text.substr(0, maxChars);
 }
 
-static void FailCompaction(uint64_t botGuid, uint64_t playerGuid, uint32_t snapshotWm, uint32_t pendingCount,
-    char const* reason)
+static std::string TrimMemoryResponse(std::string s)
 {
-    AdvanceCompactionWatermark(botGuid, playerGuid, snapshotWm, pendingCount);
-    SetCompactionCooldown(botGuid, playerGuid);
-    LOG_WARN("server.loading", "[OllamaChat] Memory compaction failed bot {} player {}: {}", botGuid, playerGuid, reason);
+    auto notSpace = [](unsigned char c) { return !std::isspace(c); };
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), notSpace));
+    s.erase(std::find_if(s.rbegin(), s.rend(), notSpace).base(), s.end());
+    if (s.size() >= 2 && s.front() == '"' && s.back() == '"')
+        return s.substr(1, s.size() - 2);
+    return s;
 }
 
-constexpr char kProfileMarker[] = "[PROFILE]";
-constexpr char kHistoryMarker[] = "[HISTORY]";
-constexpr uint32_t kCompactionPreFlushTurns = 6;
+static std::string ExtractSection(std::string const& blob, char const* marker, char const* nextMarker)
+{
+    size_t pos = blob.find(marker);
+    if (pos == std::string::npos)
+        return "";
+    size_t start = pos + strlen(marker);
+    while (start < blob.size() && (blob[start] == '\n' || blob[start] == '\r' || blob[start] == ' '))
+        ++start;
+    size_t end = blob.size();
+    if (nextMarker)
+    {
+        size_t nPos = blob.find(nextMarker, start);
+        if (nPos != std::string::npos)
+            end = nPos;
+    }
+    std::string sec = blob.substr(start, end - start);
+    while (!sec.empty() && (sec.back() == '\n' || sec.back() == '\r'))
+        sec.pop_back();
+    size_t trim = sec.find_first_not_of(" \t\r\n");
+    if (trim != std::string::npos)
+        sec = sec.substr(trim);
+    return sec;
+}
+
+static std::string MigrateLegacyMemoryText(std::string const& memoryText)
+{
+    if (memoryText.empty())
+        return "";
+
+    std::string history = ExtractSection(memoryText, kHistoryMarker, kProfileMarker);
+    if (history.empty())
+        history = ExtractSection(memoryText, kHistoryMarker, nullptr);
+    std::string profile = ExtractSection(memoryText, kProfileMarker, kHistoryMarker);
+    if (profile.empty())
+        profile = ExtractSection(memoryText, kProfileMarker, nullptr);
+
+    std::string notes;
+    if (!history.empty())
+        notes = TruncateMemory(history, 200);
+    if (!profile.empty())
+    {
+        if (!notes.empty())
+            notes += "\n";
+        notes += profile;
+        notes = TruncateMemory(notes, 256);
+    }
+    return notes;
+}
+
+static bool ParseMaintenanceResponse(std::string const& raw, std::string& facts, std::string& notes)
+{
+    std::string s = TrimMemoryResponse(raw);
+    if (s.empty())
+        return false;
+    size_t fPos = s.find(kFactsMarker);
+    size_t nPos = s.find(kNotesMarker);
+    if (fPos == std::string::npos && nPos == std::string::npos)
+        return false;
+    facts = ExtractSection(s, kFactsMarker, kNotesMarker);
+    notes = ExtractSection(s, kNotesMarker, nullptr);
+    return true;
+}
 
 static void AppendDialogueTurn(std::ostringstream& out, std::string const& playerName,
     std::string const& botName, ConversationTurn const& turn, bool tagUnverified)
@@ -137,38 +229,7 @@ static void AppendDialogueTurn(std::ostringstream& out, std::string const& playe
     out << "\n";
 }
 
-static bool HasRecallCue(std::string const& query)
-{
-    std::string lower = query;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    static char const* kCues[] = { "remember", "last time", "earlier", "you said", "recall" };
-    for (char const* cue : kCues)
-    {
-        if (lower.find(cue) != std::string::npos)
-            return true;
-    }
-    return false;
-}
-
-constexpr char kPromptTemplate[] =
-    "Memory of {player_name}:\n"
-    "Profile:\n{profile}\n\nRecent chat:\n{history}{past_recall}\n"
-    "Use only memories listed here.";
-
-static std::string BuildNudgeUserPrompt(std::string const& profile, std::string const& history, std::string const& recent)
-{
-    std::string u;
-    u.reserve(profile.size() + history.size() + recent.size() + 48);
-    u.append("Profile:\n");
-    u.append(profile.empty() ? "(none)" : profile);
-    u.append("\n\nHistory:\n");
-    u.append(history.empty() ? "(none)" : history);
-    u.append("\n\nRecent:\n");
-    u.append(recent);
-    return u;
-}
-
-static std::vector<std::string> Tokenize(const std::string& text)
+static std::vector<std::string> Tokenize(std::string const& text)
 {
     std::string lower = text;
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
@@ -184,245 +245,231 @@ static std::vector<std::string> Tokenize(const std::string& text)
     return tokens;
 }
 
-static std::unordered_map<std::string, float> ToTF(const std::vector<std::string>& tokens)
+static std::string ArchiveDoc(ArchiveTurn const& turn)
 {
-    std::unordered_map<std::string, float> tf;
-    for (const auto& t : tokens)
-        tf[t] += 1.0f;
-    return tf;
+    return "Player: " + turn.playerMsg + "\nBot: " + turn.botReply;
 }
 
-static float CosineSim(const std::unordered_map<std::string, float>& a, const std::unordered_map<std::string, float>& b)
+static std::string RetrieveBM25(std::string const& query, std::vector<std::string> const& docs, uint32_t maxItems)
 {
-    float dot = 0, na = 0, nb = 0;
-    for (const auto& [k, v] : a)
-    {
-        na += v * v;
-        auto it = b.find(k);
-        if (it != b.end())
-            dot += v * it->second;
-    }
-    for (const auto& [k, v] : b)
-        nb += v * v;
-    if (na == 0 || nb == 0)
-        return 0;
-    return dot / (std::sqrt(na) * std::sqrt(nb));
-}
-
-static std::vector<std::string> SplitMemoryLines(const std::string& blob)
-{
-    std::vector<std::string> lines;
-    std::stringstream ss(blob);
-    std::string line;
-    while (std::getline(ss, line))
-    {
-        size_t start = line.find_first_not_of(" \t\r\n");
-        if (start == std::string::npos)
-            continue;
-        lines.push_back(line.substr(start));
-    }
-    return lines;
-}
-
-static std::string RetrieveRelevantMemory(const std::string& query, const std::string& blob,
-    uint32_t maxItems, float threshold, bool fallbackIfEmpty = true)
-{
-    auto lines = SplitMemoryLines(blob);
-    if (lines.empty())
+    if (docs.empty() || maxItems == 0)
         return "";
 
-    auto qVec = ToTF(Tokenize(query));
-    std::vector<ScoredLine> scored;
-    scored.reserve(lines.size());
-    for (const auto& line : lines)
+    auto qTok = Tokenize(query);
+    if (qTok.empty())
+        return "";
+
+    std::vector<std::unordered_map<std::string, float>> tfs(docs.size());
+    std::vector<uint32_t> lens(docs.size());
+    std::unordered_map<std::string, uint32_t> df;
+    for (size_t i = 0; i < docs.size(); ++i)
     {
-        float s = CosineSim(qVec, ToTF(Tokenize(line)));
-        if (s >= threshold)
-            scored.emplace_back(line, s);
+        auto toks = Tokenize(docs[i]);
+        lens[i] = static_cast<uint32_t>(toks.size());
+        for (auto const& t : toks)
+        {
+            tfs[i][t] += 1.f;
+            ++df[t];
+        }
+    }
+
+    float avgLen = 0.f;
+    for (auto l : lens)
+        avgLen += static_cast<float>(l);
+    avgLen /= static_cast<float>(docs.size() > 0 ? docs.size() : 1);
+
+    constexpr float k1 = 1.2f;
+    constexpr float b = 0.75f;
+    std::vector<std::pair<size_t, float>> scored;
+    scored.reserve(docs.size());
+    for (size_t i = 0; i < docs.size(); ++i)
+    {
+        float score = 0.f;
+        for (auto const& qt : qTok)
+        {
+            auto it = tfs[i].find(qt);
+            if (it == tfs[i].end())
+                continue;
+            float tf = it->second;
+            uint32_t n = df[qt];
+            float idf = std::log((docs.size() - n + 0.5f) / (n + 0.5f) + 1.f);
+            float denom = tf + k1 * (1.f - b + b * static_cast<float>(lens[i]) / avgLen);
+            score += idf * (tf * (k1 + 1.f)) / denom;
+        }
+        if (score > 0.f)
+            scored.emplace_back(i, score);
     }
 
     if (scored.empty())
-    {
-        if (!fallbackIfEmpty)
-            return "";
-        std::ostringstream out;
-        uint32_t take = std::min(maxItems, static_cast<uint32_t>(lines.size()));
-        for (uint32_t i = 0; i < take; ++i)
-            out << lines[i] << "\n";
-        std::string r = out.str();
-        while (!r.empty() && (r.back() == '\n' || r.back() == '\r'))
-            r.pop_back();
-        return r;
-    }
+        return "";
 
     if (scored.size() > maxItems)
     {
-        std::partial_sort(
-            scored.begin(), scored.begin() + maxItems, scored.end(),
-            [](ScoredLine const& a, ScoredLine const& b) { return a.second > b.second; });
+        std::partial_sort(scored.begin(), scored.begin() + maxItems, scored.end(),
+            [](auto const& a, auto const& b) { return a.second > b.second; });
         scored.resize(maxItems);
     }
     else
     {
-        std::sort(scored.begin(), scored.end(), [](ScoredLine const& a, ScoredLine const& b) { return a.second > b.second; });
+        std::sort(scored.begin(), scored.end(), [](auto const& a, auto const& b) { return a.second > b.second; });
     }
 
     std::ostringstream out;
-    for (auto const& sl : scored)
-        out << sl.first << "\n";
+    for (auto const& [idx, _] : scored)
+        out << docs[idx] << "\n";
     std::string r = out.str();
     while (!r.empty() && (r.back() == '\n' || r.back() == '\r'))
         r.pop_back();
     return r;
 }
 
-static std::string TruncateMemory(const std::string& text, uint32_t maxChars)
+static bool NeedsEpisodicRecall(ChatChannelSourceLocal channel, time_t lastPlayerAt,
+    std::deque<ArchiveTurn> const& archiveRing, uint32_t pending, std::string const& message)
 {
-    if (text.size() <= maxChars)
-        return text;
-    return text.substr(0, maxChars);
-}
-
-static MemorySections ParseMemorySections(std::string const& blob)
-{
-    MemorySections sec;
-    size_t pPos = blob.find(kProfileMarker);
-    size_t hPos = blob.find(kHistoryMarker);
-    if (pPos == std::string::npos && hPos == std::string::npos)
-    {
-        sec.history = blob;
-        return sec;
-    }
-    if (pPos != std::string::npos)
-    {
-        size_t start = pPos + sizeof(kProfileMarker) - 1;
-        size_t end = hPos != std::string::npos && hPos > pPos ? hPos : blob.size();
-        sec.profile = blob.substr(start, end - start);
-        size_t trim = sec.profile.find_first_not_of(" \t\r\n");
-        if (trim != std::string::npos)
-            sec.profile = sec.profile.substr(trim);
-        while (!sec.profile.empty() && (sec.profile.back() == '\n' || sec.profile.back() == '\r'))
-            sec.profile.pop_back();
-    }
-    if (hPos != std::string::npos)
-    {
-        size_t start = hPos + sizeof(kHistoryMarker) - 1;
-        sec.history = blob.substr(start);
-        size_t trim = sec.history.find_first_not_of(" \t\r\n");
-        if (trim != std::string::npos)
-            sec.history = sec.history.substr(trim);
-    }
-    return sec;
-}
-
-static std::string FormatMemorySections(std::string const& profile, std::string const& history)
-{
-    std::ostringstream out;
-    if (!profile.empty())
-        out << kProfileMarker << "\n" << profile;
-    if (!history.empty())
-    {
-        if (!profile.empty())
-            out << "\n";
-        out << kHistoryMarker << "\n" << history;
-    }
-    return out.str();
-}
-
-static std::string TrimMemoryResponse(std::string s)
-{
-    auto notSpace = [](unsigned char c) { return !std::isspace(c); };
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), notSpace));
-    s.erase(std::find_if(s.rbegin(), s.rend(), notSpace).base(), s.end());
-    if (s.size() >= 2 && s.front() == '"' && s.back() == '"')
-        return s.substr(1, s.size() - 2);
-    return s;
-}
-
-static void FillEmptyMemorySections(MemorySections& out, MemorySections const& keep)
-{
-    if (out.profile.empty())
-        out.profile = keep.profile;
-    if (out.history.empty())
-        out.history = keep.history;
-}
-
-static std::string BuildArchiveRecall(uint64_t botGuid, uint64_t playerGuid, std::string const& query)
-{
-    std::ostringstream candidates;
-    bool queryDb = false;
-    {
-        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-        if (!GetSemanticText(botGuid, playerGuid).empty())
-            queryDb = true;
-
-        bool hasPending = false;
-        auto apIt = g_ArchivePending.find(botGuid);
-        if (apIt != g_ArchivePending.end())
-        {
-            auto pit = apIt->second.find(playerGuid);
-            if (pit != apIt->second.end() && !pit->second.empty())
-            {
-                hasPending = true;
-                queryDb = true;
-                for (auto const& turn : pit->second)
-                    candidates << "Player: " << turn.first << "\nBot: " << turn.second << "\n";
-            }
-        }
-
-        auto histIt = g_BotConversationHistory.find(botGuid);
-        if (histIt != g_BotConversationHistory.end())
-        {
-            auto pit = histIt->second.find(playerGuid);
-            if (pit != histIt->second.end() && !pit->second.empty())
-            {
-                queryDb = true;
-                if (!hasPending)
-                {
-                    uint32_t wm = GetWatermark(botGuid, playerGuid);
-                    for (size_t i = wm; i < pit->second.size(); ++i)
-                        candidates << "Player: " << pit->second[i].playerMessage
-                                   << "\nBot: " << pit->second[i].botReply << "\n";
-                }
-            }
-        }
-    }
-
-    if (!queryDb)
-        return "";
-
-    if (QueryResult result = CharacterDatabase.Query(SafeFormat(
-            "SELECT context, bot_reply FROM mod_ollama_chat_memory_archive "
-            "WHERE bot_guid = {} AND player_guid = {} ORDER BY created_at DESC LIMIT {}",
-            botGuid, playerGuid, OllamaMemory::ArchiveRecallWindow)))
-    {
-        do
-        {
-            candidates << "Player: " << (*result)[0].Get<std::string>()
-                       << "\nBot: " << (*result)[1].Get<std::string>() << "\n";
-        } while (result->NextRow());
-    }
-
-    std::string blob = candidates.str();
-    if (blob.empty())
-        return "";
-    std::string recalled = RetrieveRelevantMemory(
-        query, blob, OllamaMemory::RecallMaxItems, OllamaMemory::RecallThreshold, false);
-    if (recalled.empty())
-        return "";
-    return "\n\nRelevant past moments:\n" + recalled;
-}
-
-static bool DequeueMemoryJob(MemoryJobType type, MemoryJob& job)
-{
-    std::lock_guard<std::mutex> lock(g_MemoryQueueMutex);
-    auto it = std::find_if(g_MemoryCompactionQueue.begin(), g_MemoryCompactionQueue.end(),
-        [type](MemoryJob const& j) { return j.type == type; });
-    if (it == g_MemoryCompactionQueue.end())
+    if (channel == SRC_GENERAL_LOCAL)
         return false;
-    job = *it;
-    g_MemoryCompactionQueue.erase(it);
-    return true;
+
+    if (lastPlayerAt && difftime(time(nullptr), lastPlayerAt) >=
+            static_cast<double>(OllamaMemory::SessionResumeMinutes) * 60.0)
+        return true;
+    if (pending <= 2 && !archiveRing.empty())
+        return true;
+    return message.find('?') != std::string::npos;
+}
+
+static bool IsSessionResume(time_t lastPlayerAt)
+{
+    return lastPlayerAt && difftime(time(nullptr), lastPlayerAt) >=
+        static_cast<double>(OllamaMemory::SessionResumeMinutes) * 60.0;
+}
+
+static std::string BuildPastRecall(time_t lastPlayerAt, std::deque<ArchiveTurn> const& archiveRing,
+    std::string const& message)
+{
+    if (archiveRing.empty())
+        return "";
+
+    if (IsSessionResume(lastPlayerAt))
+    {
+        std::ostringstream out;
+        size_t n = std::min<size_t>(3, archiveRing.size());
+        for (size_t i = archiveRing.size() - n; i < archiveRing.size(); ++i)
+            out << ArchiveDoc(archiveRing[i]) << "\n";
+        std::string r = out.str();
+        while (!r.empty() && (r.back() == '\n' || r.back() == '\r'))
+            r.pop_back();
+        return r;
+    }
+
+    std::vector<std::string> docs;
+    docs.reserve(archiveRing.size());
+    for (auto const& turn : archiveRing)
+        docs.push_back(ArchiveDoc(turn));
+    return RetrieveBM25(message, docs, OllamaMemory::RecallMaxItems);
+}
+
+static PairMemoryState* GetPairUnlocked(uint64_t botGuid, uint64_t playerGuid)
+{
+    auto botIt = g_PairMemory.find(botGuid);
+    if (botIt == g_PairMemory.end())
+        return nullptr;
+    auto pit = botIt->second.find(playerGuid);
+    return pit == botIt->second.end() ? nullptr : &pit->second;
+}
+
+static PairMemoryState& TouchPairUnlocked(uint64_t botGuid, uint64_t playerGuid)
+{
+    auto& pair = g_PairMemory[botGuid][playerGuid];
+    pair.cacheLastUsed = time(nullptr);
+    return pair;
+}
+
+static bool PairDequeEmptyUnlocked(uint64_t botGuid, uint64_t playerGuid)
+{
+    auto botIt = g_BotConversationHistory.find(botGuid);
+    if (botIt == g_BotConversationHistory.end())
+        return true;
+    auto pit = botIt->second.find(playerGuid);
+    return pit == botIt->second.end() || pit->second.empty();
+}
+
+static bool IsPlayerOffline(uint64_t playerGuid)
+{
+    return !ObjectAccessor::FindPlayer(ObjectGuid(playerGuid));
+}
+
+static bool PairIdle(PairMemoryState const& state, time_t now)
+{
+    if (!state.cacheLastUsed)
+        return false;
+    return difftime(now, state.cacheLastUsed) >= static_cast<double>(OllamaMemory::PairCacheIdleSec);
+}
+
+static void EvictPairCacheUnlocked()
+{
+    time_t now = time(nullptr);
+    if (g_PairMemory.size() <= OllamaMemory::PairCacheMax)
+    {
+        for (auto botIt = g_PairMemory.begin(); botIt != g_PairMemory.end();)
+        {
+            for (auto pit = botIt->second.begin(); pit != botIt->second.end();)
+            {
+                uint64_t playerGuid = pit->first;
+                if (IsPlayerOffline(playerGuid) && PairDequeEmptyUnlocked(botIt->first, playerGuid) &&
+                    PairIdle(pit->second, now))
+                {
+                    pit = botIt->second.erase(pit);
+                }
+                else
+                    ++pit;
+            }
+            if (botIt->second.empty())
+                botIt = g_PairMemory.erase(botIt);
+            else
+                ++botIt;
+        }
+        return;
+    }
+
+    struct Candidate
+    {
+        uint64_t botGuid;
+        uint64_t playerGuid;
+        time_t lastUsed;
+    };
+    std::vector<Candidate> candidates;
+    for (auto const& [botGuid, playerMap] : g_PairMemory)
+    {
+        for (auto const& [playerGuid, state] : playerMap)
+        {
+            if (IsPlayerOffline(playerGuid) && PairDequeEmptyUnlocked(botGuid, playerGuid))
+                candidates.push_back({ botGuid, playerGuid, state.cacheLastUsed });
+        }
+    }
+    std::sort(candidates.begin(), candidates.end(),
+        [](Candidate const& a, Candidate const& b) { return a.lastUsed < b.lastUsed; });
+
+    size_t toEvict = g_PairMemory.size() - OllamaMemory::PairCacheMax + 1;
+    for (size_t i = 0; i < candidates.size() && toEvict > 0; ++i, --toEvict)
+        g_PairMemory[candidates[i].botGuid].erase(candidates[i].playerGuid);
+}
+
+static void PushArchiveTurnUnlocked(PairMemoryState& pair, std::string const& playerMsg,
+    std::string const& botReply, time_t at)
+{
+    pair.archiveRing.push_back({ playerMsg, botReply, at });
+    while (pair.archiveRing.size() > OllamaMemory::ArchiveRingCap)
+        pair.archiveRing.pop_front();
+}
+
+static void EnqueuePairLoad(uint64_t botGuid, uint64_t playerGuid)
+{
+    std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
+    uint64_t key = MemoryPairKey(botGuid, playerGuid);
+    if (g_PairLoadPending.count(key))
+        return;
+    g_PairLoadPending.insert(key);
+    g_PairLoadQueue.push_back({ botGuid, playerGuid });
 }
 
 static bool IsTrivialTurn(std::string const& msg)
@@ -459,21 +506,27 @@ static void SetWatermark(uint64_t botGuid, uint64_t playerGuid, uint32_t count)
     g_CompactedTurnCount[botGuid][playerGuid] = count;
 }
 
-static std::string GetSemanticText(uint64_t botGuid, uint64_t playerGuid)
+static uint32_t PendingCountUnlocked(uint64_t botGuid, uint64_t playerGuid)
 {
-    auto botIt = g_SemanticMemory.find(botGuid);
-    if (botIt == g_SemanticMemory.end())
-        return "";
+    auto botIt = g_BotConversationHistory.find(botGuid);
+    if (botIt == g_BotConversationHistory.end())
+        return 0;
     auto playerIt = botIt->second.find(playerGuid);
-    return playerIt == botIt->second.end() ? "" : playerIt->second;
+    if (playerIt == botIt->second.end())
+        return 0;
+    uint32_t wm = GetWatermark(botGuid, playerGuid);
+    return playerIt->second.size() > wm ? static_cast<uint32_t>(playerIt->second.size() - wm) : 0;
 }
 
-static void SetSemanticText(uint64_t botGuid, uint64_t playerGuid, const std::string& text)
+static bool IsMaintenanceOnCooldown(PairMemoryState const& pair)
 {
-    g_SemanticMemory[botGuid][playerGuid] = text;
+    if (!pair.lastMaintenanceAt)
+        return false;
+    return difftime(time(nullptr), pair.lastMaintenanceAt) <
+        static_cast<double>(OllamaMemory::MaintenanceCooldownSec);
 }
 
-static bool ShouldCompactUnlocked(uint64_t botGuid, uint64_t playerGuid)
+static bool ShouldRunMaintenanceUnlocked(uint64_t botGuid, uint64_t playerGuid)
 {
     auto botIt = g_BotConversationHistory.find(botGuid);
     if (botIt == g_BotConversationHistory.end())
@@ -500,110 +553,157 @@ static bool ShouldCompactUnlocked(uint64_t botGuid, uint64_t playerGuid)
         if (ptsIt != tsIt->second.end() && ptsIt->second.size() > wm)
         {
             time_t oldest = ptsIt->second[wm];
-            time_t now = time(nullptr);
-            double ageSec = difftime(now, oldest);
-            if (OllamaMemory::CompactionMaxAgeMinutes > 0 &&
-                ageSec >= static_cast<double>(OllamaMemory::CompactionMaxAgeMinutes) * 60)
-                return true;
-            if (OllamaMemory::CompactionMaxAgeMinutes == 0 && OllamaMemory::EpisodicMaxAgeDays > 0 &&
-                ageSec >= static_cast<double>(OllamaMemory::EpisodicMaxAgeDays) * 86400)
+            if (difftime(time(nullptr), oldest) >=
+                    static_cast<double>(OllamaMemory::CompactionMaxAgeMinutes) * 60.0)
                 return true;
         }
     }
     return false;
 }
 
-static void RunCompaction(uint64_t botGuid, uint64_t playerGuid)
+static bool AllPendingTrivialUnlocked(uint64_t botGuid, uint64_t playerGuid)
 {
-    std::vector<ConversationTurn> turns;
-    std::string existingMemory;
+    auto botIt = g_BotConversationHistory.find(botGuid);
+    if (botIt == g_BotConversationHistory.end())
+        return true;
+    auto playerIt = botIt->second.find(playerGuid);
+    if (playerIt == botIt->second.end())
+        return true;
+
+    uint32_t wm = GetWatermark(botGuid, playerGuid);
+    for (size_t i = wm; i < playerIt->second.size(); ++i)
+    {
+        if (!IsTrivialTurn(playerIt->second[i].playerMessage))
+            return false;
+    }
+    return true;
+}
+
+static bool DequeueMemoryJob(MemoryJob& job)
+{
+    std::lock_guard<std::mutex> lock(g_MemoryQueueMutex);
+    if (g_MemoryMaintenanceQueue.empty())
+        return false;
+    job = g_MemoryMaintenanceQueue.front();
+    g_MemoryMaintenanceQueue.pop_front();
+    return true;
+}
+
+static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
+{
+    std::vector<ConversationTurn> pendingTurns;
+    std::string existingFacts;
+    std::string existingNotes;
+    std::string storedName;
     uint32_t pendingCount = 0;
     uint32_t snapshotWm = 0;
-    float sentiment = g_SentimentDefaultValue;
 
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
         auto botIt = g_BotConversationHistory.find(botGuid);
         if (botIt == g_BotConversationHistory.end())
-            return;
+            return false;
         auto playerIt = botIt->second.find(playerGuid);
         if (playerIt == botIt->second.end())
-            return;
+            return false;
 
         snapshotWm = GetWatermark(botGuid, playerGuid);
         size_t dequeSize = playerIt->second.size();
         if (dequeSize <= snapshotWm)
-            return;
+            return false;
 
         pendingCount = static_cast<uint32_t>(dequeSize - snapshotWm);
-        size_t flushStart = dequeSize > kCompactionPreFlushTurns ? dequeSize - kCompactionPreFlushTurns : 0;
-        size_t blockStart = std::min(static_cast<size_t>(snapshotWm), flushStart);
-        turns.assign(playerIt->second.begin() + static_cast<std::ptrdiff_t>(blockStart), playerIt->second.end());
-        existingMemory = GetSemanticText(botGuid, playerGuid);
+        pendingTurns.assign(playerIt->second.begin() + static_cast<std::ptrdiff_t>(snapshotWm), playerIt->second.end());
+
+        if (PairMemoryState* pair = GetPairUnlocked(botGuid, playerGuid))
+        {
+            existingFacts = pair->facts;
+            existingNotes = pair->notes;
+            storedName = pair->playerName;
+        }
+    }
+
+    if (g_queryManager.ShouldDeferMemoryWork())
+    {
+        std::lock_guard<std::mutex> lock(g_MemoryQueueMutex);
+        g_MemoryMaintenanceQueue.push_front({ MemoryJobType::Maintenance, botGuid, playerGuid });
+        return true;
     }
 
     Player* bot = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
     Player* player = ObjectAccessor::FindPlayer(ObjectGuid(playerGuid));
-    std::string playerName = player ? player->GetName() : "Player";
+    std::string playerName = player ? player->GetName() : (storedName.empty() ? "Player" : storedName);
     std::string botName = bot ? bot->GetName() : "Bot";
 
-    if (bot && g_EnableSentimentTracking)
-        sentiment = GetBotPlayerSentiment(botGuid, playerGuid);
+    std::ostringstream turnsBlock;
+    for (ConversationTurn const& turn : pendingTurns)
+        AppendDialogueTurn(turnsBlock, playerName, botName, turn, !turn.verified);
 
-    std::ostringstream verifiedBlock;
-    std::ostringstream unverifiedBlock;
-    for (ConversationTurn const& turn : turns)
-    {
-        if (turn.verified)
-            AppendDialogueTurn(verifiedBlock, playerName, botName, turn, false);
-        else
-            AppendDialogueTurn(unverifiedBlock, playerName, botName, turn, true);
-    }
-
-    BotContext ctx;
     ScenarioInput input;
-    input.compactionExistingMemory = existingMemory.empty() ? "(none)" : existingMemory;
-    input.compactionEpisodicVerified = verifiedBlock.str();
-    input.compactionEpisodicUnverified = unverifiedBlock.str();
-    input.compactionPlayerName = playerName;
-    input.compactionSentiment = sentiment;
+    input.maintenanceFacts = existingFacts;
+    input.maintenanceNotes = existingNotes;
+    input.maintenanceTurns = turnsBlock.str();
 
-    PromptBundle bundle = OllamaPromptComposer::Build(PromptScenario::MemoryCompaction, ctx, input);
+    PromptBundle bundle = OllamaPromptComposer::Build(PromptScenario::MemoryMaintenance, {}, input);
     bundle.maxTokens = OllamaMemory::MemoryQueryMaxTokens;
     auto future = SubmitQuery(bundle);
     std::string response = future.valid() ? future.get() : "";
-    if (response.empty())
+
+    std::string newFacts = existingFacts;
+    std::string newNotes = existingNotes;
+    bool parsed = false;
+    if (!response.empty())
     {
-        FailCompaction(botGuid, playerGuid, snapshotWm, pendingCount, "empty LLM response");
-        return;
+        std::string llmFacts;
+        std::string llmNotes;
+        parsed = ParseMaintenanceResponse(response, llmFacts, llmNotes);
+        if (parsed)
+        {
+            if (!llmFacts.empty())
+                newFacts = llmFacts;
+            if (!llmNotes.empty())
+                newNotes = llmNotes;
+        }
     }
 
-    MemorySections existing = ParseMemorySections(existingMemory);
-    MemorySections sections = ParseMemorySections(TrimMemoryResponse(response));
-    FillEmptyMemorySections(sections, existing);
-    if (sections.profile.empty() && sections.history.empty())
-    {
-        FailCompaction(botGuid, playerGuid, snapshotWm, pendingCount, "empty memory");
-        return;
-    }
+    bool const failed = response.empty() || !parsed;
+    newFacts = TruncateMemory(newFacts, OllamaMemory::FactsMaxChars);
+    newNotes = TruncateMemory(newNotes, OllamaMemory::NotesMaxChars);
 
-    ClearCompactionCooldown(botGuid, playerGuid);
-
-    std::string newMemory = TruncateMemory(
-        FormatMemorySections(sections.profile, sections.history), OllamaMemory::MaxSemanticChars);
+    time_t now = time(nullptr);
+    std::vector<std::pair<std::string, std::string>> archiveInserts;
+    archiveInserts.reserve(pendingTurns.size());
+    for (auto const& turn : pendingTurns)
+        archiveInserts.emplace_back(turn.playerMessage, turn.botReply);
 
     uint32_t newWm = 0;
-    bool deleteEpisodic = false;
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
         auto botIt = g_BotConversationHistory.find(botGuid);
         if (botIt == g_BotConversationHistory.end())
-            return;
+            return false;
         auto playerIt = botIt->second.find(playerGuid);
         if (playerIt == botIt->second.end() || playerIt->second.size() < snapshotWm)
-            return;
+            return false;
 
-        SetSemanticText(botGuid, playerGuid, newMemory);
+        PairMemoryState& pair = TouchPairUnlocked(botGuid, playerGuid);
+        if (failed)
+        {
+            newFacts = existingFacts;
+            newNotes = existingNotes;
+        }
+        else
+        {
+            pair.facts = newFacts;
+            pair.notes = newNotes;
+            pair.lastMaintenanceAt = now;
+            ClearMaintenanceFailCooldown(botGuid, playerGuid);
+        }
+
+        pair.playerName = playerName;
+        for (auto const& turn : pendingTurns)
+            PushArchiveTurnUnlocked(pair, turn.playerMessage, turn.botReply, now);
+
         uint32_t currentWm = GetWatermark(botGuid, playerGuid);
         newWm = std::min(currentWm + pendingCount, static_cast<uint32_t>(playerIt->second.size()));
         SetWatermark(botGuid, playerGuid, newWm);
@@ -618,131 +718,102 @@ static void RunCompaction(uint64_t botGuid, uint64_t playerGuid)
                 ts.pop_front();
         }
 
-        deleteEpisodic = g_PersistEpisodicMemory;
+        EvictPairCacheUnlocked();
     }
 
-    std::string escMem = newMemory;
-    CharacterDatabase.EscapeString(escMem);
+    if (failed)
+    {
+        SetMaintenanceFailCooldown(botGuid, playerGuid);
+        LOG_WARN("server.loading", "[OllamaChat] Memory maintenance failed bot {} player {}: {}",
+            botGuid, playerGuid, response.empty() ? "empty LLM response" : "parse fail");
+    }
+
+    std::string escFacts = newFacts;
+    std::string escNotes = newNotes;
     std::string escName = playerName;
+    CharacterDatabase.EscapeString(escFacts);
+    CharacterDatabase.EscapeString(escNotes);
     CharacterDatabase.EscapeString(escName);
 
     CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-    if (deleteEpisodic)
+    for (auto const& turn : archiveInserts)
     {
+        std::string escCtx = turn.first;
+        std::string escReply = turn.second;
+        CharacterDatabase.EscapeString(escCtx);
+        CharacterDatabase.EscapeString(escReply);
         trans->Append(SafeFormat(
-            "DELETE FROM mod_ollama_chat_memory_episodic WHERE bot_guid = {} AND player_guid = {}",
-            botGuid, playerGuid));
+            "INSERT INTO mod_ollama_chat_memory_archive (bot_guid, player_guid, context, bot_reply) "
+            "VALUES ({}, {}, '{}', '{}')",
+            botGuid, playerGuid, escCtx, escReply));
     }
+
+    std::string lastAtSql = "NULL";
+    {
+        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
+        if (PairMemoryState* pair = GetPairUnlocked(botGuid, playerGuid))
+        {
+            if (pair->lastPlayerAt)
+                lastAtSql = SafeFormat("FROM_UNIXTIME({})", static_cast<uint64_t>(pair->lastPlayerAt));
+        }
+    }
+
     trans->Append(SafeFormat(
-        "REPLACE INTO mod_ollama_chat_memory_semantic (bot_guid, player_guid, player_name, memory_text, "
-        "compacted_turn_count, last_compacted_at) VALUES ({}, {}, '{}', '{}', {}, NOW())",
-        botGuid, playerGuid, escName, escMem, newWm));
-    MemoryCommit(trans, "compaction");
+        "DELETE FROM mod_ollama_chat_memory_episodic WHERE bot_guid = {} AND player_guid = {}",
+        botGuid, playerGuid));
+
+    trans->Append(SafeFormat(
+        "REPLACE INTO mod_ollama_chat_memory_semantic (bot_guid, player_guid, player_name, facts_text, notes_text, "
+        "last_player_at, compacted_turn_count, last_compacted_at) VALUES "
+        "({}, {}, '{}', '{}', '{}', {}, {}, NOW())",
+        botGuid, playerGuid, escName, escFacts, escNotes, lastAtSql, newWm));
+
+    {
+        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
+        auto botIt = g_BotConversationHistory.find(botGuid);
+        if (botIt != g_BotConversationHistory.end())
+        {
+            auto playerIt = botIt->second.find(playerGuid);
+            if (playerIt != botIt->second.end())
+            {
+                uint32_t wm = GetWatermark(botGuid, playerGuid);
+                for (size_t i = wm; i < playerIt->second.size(); ++i)
+                {
+                    std::string escCtx = playerIt->second[i].playerMessage;
+                    std::string escReply = playerIt->second[i].botReply;
+                    CharacterDatabase.EscapeString(escCtx);
+                    CharacterDatabase.EscapeString(escReply);
+                    trans->Append(SafeFormat(
+                        "INSERT INTO mod_ollama_chat_memory_episodic (bot_guid, player_guid, player_name, context, bot_reply) "
+                        "VALUES ({}, {}, '{}', '{}', '{}')",
+                        botGuid, playerGuid, escName, escCtx, escReply));
+                }
+            }
+        }
+    }
+
+    MemoryCommit(trans, "maintenance");
+    TrimArchivePair(botGuid, playerGuid);
 
     if (g_DebugEnabled)
-        LOG_INFO("server.loading", "[OllamaChat] Compacted memory for bot {} player {} ({} turns)",
-                 botGuid, playerGuid, pendingCount);
-}
-
-static void RunNudge(uint64_t botGuid, uint64_t playerGuid)
-{
-    std::string profile;
-    std::string history;
-    std::string recent;
-    {
-        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-        time_t now = time(nullptr);
-        auto nudgeIt = g_LastNudgeTime.find(botGuid);
-        if (nudgeIt != g_LastNudgeTime.end())
-        {
-            auto lastIt = nudgeIt->second.find(playerGuid);
-            if (lastIt != nudgeIt->second.end() &&
-                difftime(now, lastIt->second) < static_cast<double>(OllamaMemory::NudgeMinIntervalSeconds))
-                return;
-        }
-
-        MemorySections sec = ParseMemorySections(GetSemanticText(botGuid, playerGuid));
-        profile = sec.profile;
-        history = sec.history;
-
-        auto histIt = g_BotConversationHistory.find(botGuid);
-        if (histIt == g_BotConversationHistory.end())
-            return;
-        auto pairIt = histIt->second.find(playerGuid);
-        if (pairIt == histIt->second.end() || pairIt->second.empty())
-            return;
-
-        size_t from = pairIt->second.size() > 3 ? pairIt->second.size() - 3 : 0;
-        std::ostringstream ep;
-        for (size_t i = from; i < pairIt->second.size(); ++i)
-            ep << "Player: " << pairIt->second[i].playerMessage << "\nBot: " << pairIt->second[i].botReply << "\n";
-        recent = ep.str();
-        if (recent.empty())
-            return;
-    }
-
-    PromptBundle bundle;
-    bundle.system = GetMemoryNudgeSystemPrompt();
-    bundle.user = BuildNudgeUserPrompt(profile, history, recent);
-    bundle.maxTokens = OllamaMemory::MemoryQueryMaxTokens;
-    auto future = SubmitQuery(bundle);
-    std::string response = future.valid() ? future.get() : "";
-    if (response.empty())
-        return;
-
-    MemorySections existing{profile, history};
-    MemorySections updated = ParseMemorySections(TrimMemoryResponse(response));
-    FillEmptyMemorySections(updated, existing);
-    if (updated.profile.empty() && updated.history.empty())
-        return;
-
-    std::string oldMemory = FormatMemorySections(profile, history);
-    std::string newMemory = TruncateMemory(
-        FormatMemorySections(updated.profile, updated.history), OllamaMemory::MaxSemanticChars);
-    if (newMemory == oldMemory)
-        return;
-
-    uint32_t wm = 0;
-    std::string playerName = "Player";
-    {
-        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-        SetSemanticText(botGuid, playerGuid, newMemory);
-        g_LastNudgeTime[botGuid][playerGuid] = time(nullptr);
-        wm = GetWatermark(botGuid, playerGuid);
-    }
-
-    Player* player = ObjectAccessor::FindPlayer(ObjectGuid(playerGuid));
-    if (player)
-        playerName = player->GetName();
-
-    std::string escMem = newMemory;
-    std::string escName = playerName;
-    CharacterDatabase.EscapeString(escMem);
-    CharacterDatabase.EscapeString(escName);
-    MemoryExecute(SafeFormat(
-        "REPLACE INTO mod_ollama_chat_memory_semantic (bot_guid, player_guid, player_name, memory_text, "
-        "compacted_turn_count, last_compacted_at) VALUES ({}, {}, '{}', '{}', {}, NOW())",
-        botGuid, playerGuid, escName, escMem, wm), "nudge");
+        LOG_INFO("server.loading", "[OllamaChat] Memory maintenance bot {} player {} ({} turns, {})",
+            botGuid, playerGuid, pendingCount, failed ? "failed" : "ok");
+    return false;
 }
 
 static void DispatchMemoryJob(MemoryJob const& job)
 {
     uint64_t jobKey = MemoryJobKey(job.type, job.botGuid, job.playerGuid);
-    ++g_MemoryCompactionInFlight;
+    ++g_MemoryMaintenanceInFlight;
     std::thread([job, jobKey]() {
-        if (job.type == MemoryJobType::Compact)
-            RunCompaction(job.botGuid, job.playerGuid);
-        else
-            RunNudge(job.botGuid, job.playerGuid);
-        --g_MemoryCompactionInFlight;
+        bool const deferred = RunMemoryMaintenance(job.botGuid, job.playerGuid);
+        --g_MemoryMaintenanceInFlight;
+        if (deferred)
+            return;
         std::lock_guard<std::mutex> lock(g_MemoryQueueMutex);
-        g_MemoryCompactionPending.erase(jobKey);
+        g_MemoryMaintenancePending.erase(jobKey);
     }).detach();
 }
-
-} // namespace
-
-static void LoadBotMemoryFromDB();
 
 static void PurgeStaleMemoryRows()
 {
@@ -764,9 +835,9 @@ static void PurgeStaleMemoryRows()
     MemoryCommit(trans, "purge stale");
 }
 
-static void TrimArchivePair(uint64_t botGuid, uint64_t playerGuid)
+static std::string ArchiveTrimSql(uint64_t botGuid, uint64_t playerGuid)
 {
-    MemoryExecute(SafeFormat(
+    return SafeFormat(
         "DELETE FROM mod_ollama_chat_memory_archive "
         "WHERE bot_guid = {} AND player_guid = {} AND id NOT IN ("
         "  SELECT id FROM ("
@@ -775,7 +846,12 @@ static void TrimArchivePair(uint64_t botGuid, uint64_t playerGuid)
         "    ORDER BY created_at DESC LIMIT {}"
         "  ) t"
         ")",
-        botGuid, playerGuid, botGuid, playerGuid, OllamaMemory::ArchiveMaxRowsPerPair), "archive trim");
+        botGuid, playerGuid, botGuid, playerGuid, OllamaMemory::ArchiveMaxRowsPerPair);
+}
+
+static void TrimArchivePair(uint64_t botGuid, uint64_t playerGuid)
+{
+    MemoryExecute(ArchiveTrimSql(botGuid, playerGuid), "archive trim");
 }
 
 static void InsertArchiveTurnsToDB(uint64_t botGuid, uint64_t playerGuid,
@@ -801,48 +877,108 @@ static void InsertArchiveTurnsToDB(uint64_t botGuid, uint64_t playerGuid,
     TrimArchivePair(botGuid, playerGuid);
 }
 
-static bool PopArchivePendingForDequeEviction(uint64_t botGuid, uint64_t playerGuid, size_t dequeSize,
-    std::pair<std::string, std::string>& out)
+static void LoadPairFromDB(uint64_t botGuid, uint64_t playerGuid)
 {
-    auto botIt = g_ArchivePending.find(botGuid);
-    if (botIt == g_ArchivePending.end())
-        return false;
-    auto playerIt = botIt->second.find(playerGuid);
-    if (playerIt == botIt->second.end() || playerIt->second.size() < dequeSize)
-        return false;
+    PairMemoryState loaded;
+    bool hasRow = false;
+    uint32_t wm = 0;
 
-    auto& pending = playerIt->second;
-    size_t const idx = pending.size() - dequeSize;
-    out = pending[idx];
-    pending.erase(pending.begin() + static_cast<std::ptrdiff_t>(idx));
-    if (pending.empty())
-        botIt->second.erase(playerGuid);
-    return true;
+    if (QueryResult result = CharacterDatabase.Query(SafeFormat(
+            "SELECT player_name, memory_text, facts_text, notes_text, "
+            "UNIX_TIMESTAMP(last_player_at), compacted_turn_count "
+            "FROM mod_ollama_chat_memory_semantic WHERE bot_guid = {} AND player_guid = {}",
+            botGuid, playerGuid)))
+    {
+        loaded.playerName = (*result)[0].Get<std::string>();
+        std::string memoryText = (*result)[1].Get<std::string>();
+        loaded.facts = (*result)[2].Get<std::string>();
+        loaded.notes = (*result)[3].Get<std::string>();
+        if (!(*result)[4].IsNull())
+            loaded.lastPlayerAt = static_cast<time_t>((*result)[4].Get<uint64_t>());
+        wm = (*result)[5].Get<uint32_t>();
+        hasRow = true;
+
+        if (loaded.facts.empty() && !memoryText.empty())
+            loaded.notes = MigrateLegacyMemoryText(memoryText);
+    }
+
+    if (QueryResult ar = CharacterDatabase.Query(SafeFormat(
+            "SELECT context, bot_reply, UNIX_TIMESTAMP(created_at) "
+            "FROM mod_ollama_chat_memory_archive WHERE bot_guid = {} AND player_guid = {} "
+            "ORDER BY created_at DESC LIMIT {}",
+            botGuid, playerGuid, OllamaMemory::ArchiveRecallWindow)))
+    {
+        std::vector<ArchiveTurn> rows;
+        do
+        {
+            ArchiveTurn turn;
+            turn.playerMsg = (*ar)[0].Get<std::string>();
+            turn.botReply = (*ar)[1].Get<std::string>();
+            turn.at = (*ar)[2].IsNull() ? time(nullptr) : static_cast<time_t>((*ar)[2].Get<uint64_t>());
+            rows.push_back(std::move(turn));
+        } while (ar->NextRow());
+
+        std::reverse(rows.begin(), rows.end());
+        for (auto const& turn : rows)
+            loaded.archiveRing.push_back(turn);
+        while (loaded.archiveRing.size() > OllamaMemory::ArchiveRingCap)
+            loaded.archiveRing.pop_front();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
+        PairMemoryState& pair = TouchPairUnlocked(botGuid, playerGuid);
+        if (hasRow)
+        {
+            g_CompactedTurnCount[botGuid][playerGuid] = wm;
+            if (pair.facts.empty())
+                pair.facts = loaded.facts;
+            if (pair.notes.empty())
+                pair.notes = loaded.notes;
+            if (pair.playerName.empty())
+                pair.playerName = loaded.playerName;
+            if (!pair.lastPlayerAt)
+                pair.lastPlayerAt = loaded.lastPlayerAt;
+        }
+        if (pair.archiveRing.empty() && !loaded.archiveRing.empty())
+            pair.archiveRing = std::move(loaded.archiveRing);
+        EvictPairCacheUnlocked();
+    }
 }
 
-static void WaitForMemoryWorkers()
+static void ProcessPairLoadTick()
 {
-    for (uint32_t i = 0; i < 300 && g_MemoryCompactionInFlight.load() > 0; ++i)
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::pair<uint64_t, uint64_t> pairKey;
+    {
+        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
+        if (g_PairLoadQueue.empty())
+            return;
+        pairKey = g_PairLoadQueue.front();
+        g_PairLoadQueue.pop_front();
+        g_PairLoadPending.erase(MemoryPairKey(pairKey.first, pairKey.second));
+    }
+    LoadPairFromDB(pairKey.first, pairKey.second);
 }
 
 static void WaitForMemoryWorkersBlocking()
 {
     uint32_t i = 0;
-    for (; i < 1200 && g_MemoryCompactionInFlight.load() > 0; ++i)
+    for (; i < 1200 && g_MemoryMaintenanceInFlight.load() > 0; ++i)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    if (i >= 1200 && g_MemoryCompactionInFlight.load() > 0)
+    if (i >= 1200 && g_MemoryMaintenanceInFlight.load() > 0)
         LOG_WARN("server.loading", "[OllamaChat] Memory worker wait timed out ({} in flight)",
-            g_MemoryCompactionInFlight.load());
+            g_MemoryMaintenanceInFlight.load());
 }
 
 static void DrainMemoryWorkersAndQueue()
 {
     WaitForMemoryWorkersBlocking();
     std::lock_guard<std::mutex> lock(g_MemoryQueueMutex);
-    g_MemoryCompactionQueue.clear();
-    g_MemoryCompactionPending.clear();
+    g_MemoryMaintenanceQueue.clear();
+    g_MemoryMaintenancePending.clear();
 }
+
+static void LoadBotMemoryFromDB();
 
 void InitializeBotMemory()
 {
@@ -851,11 +987,12 @@ void InitializeBotMemory()
     DrainMemoryWorkersAndQueue();
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-        g_ArchivePending.clear();
-        g_LastNudgeTime.clear();
+        g_PairMemory.clear();
+        g_PairLoadQueue.clear();
+        g_PairLoadPending.clear();
         {
-            std::lock_guard<std::mutex> cooldownLock(g_CompactionCooldownMutex);
-            g_CompactionCooldownUntil.clear();
+            std::lock_guard<std::mutex> cooldownLock(g_MaintenanceFailCooldownMutex);
+            g_MaintenanceFailCooldownUntil.clear();
         }
     }
     LoadBotMemoryFromDB();
@@ -870,69 +1007,108 @@ static void LoadBotMemoryFromDB()
 
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-        g_SemanticMemory.clear();
         g_CompactedTurnCount.clear();
         g_TurnTimestamps.clear();
         g_BotConversationHistory.clear();
+        g_PairMemory.clear();
 
         if (QueryResult result = CharacterDatabase.Query(
-                "SELECT bot_guid, player_guid, player_name, memory_text, compacted_turn_count "
+                "SELECT bot_guid, player_guid, player_name, memory_text, facts_text, notes_text, "
+                "UNIX_TIMESTAMP(last_player_at), compacted_turn_count "
                 "FROM mod_ollama_chat_memory_semantic"))
         {
             do
             {
                 uint64_t botGuid = (*result)[0].Get<uint64_t>();
                 uint64_t playerGuid = (*result)[1].Get<uint64_t>();
-                std::string memText = (*result)[3].Get<std::string>();
-                g_SemanticMemory[botGuid][playerGuid] = memText;
-                g_CompactedTurnCount[botGuid][playerGuid] = (*result)[4].Get<uint32_t>();
+                std::string memoryText = (*result)[3].Get<std::string>();
+                std::string facts = (*result)[4].Get<std::string>();
+                std::string notes = (*result)[5].Get<std::string>();
+
+                g_CompactedTurnCount[botGuid][playerGuid] = (*result)[7].Get<uint32_t>();
+
+                PairMemoryState& pair = g_PairMemory[botGuid][playerGuid];
+                pair.facts = facts;
+                pair.notes = notes;
+                if (facts.empty() && !memoryText.empty())
+                    pair.notes = MigrateLegacyMemoryText(memoryText);
+                pair.playerName = (*result)[2].Get<std::string>();
+                if (!(*result)[6].IsNull())
+                    pair.lastPlayerAt = static_cast<time_t>((*result)[6].Get<uint64_t>());
+                pair.cacheLastUsed = time(nullptr);
             } while (result->NextRow());
         }
 
-        if (g_PersistEpisodicMemory)
+        if (QueryResult arch = CharacterDatabase.Query(
+                "SELECT bot_guid, player_guid, context, bot_reply, UNIX_TIMESTAMP(created_at) "
+                "FROM mod_ollama_chat_memory_archive ORDER BY created_at ASC"))
         {
-            std::unordered_set<uint64_t> rebuiltPairs;
-            if (QueryResult epResult = CharacterDatabase.Query(
-                    "SELECT bot_guid, player_guid, context, bot_reply, UNIX_TIMESTAMP(created_at) "
-                    "FROM mod_ollama_chat_memory_episodic ORDER BY created_at ASC"))
+            do
             {
-                do
-                {
-                    uint64_t botGuid = (*epResult)[0].Get<uint64_t>();
-                    uint64_t playerGuid = (*epResult)[1].Get<uint64_t>();
-                    uint64_t pairKey = MemoryPairKey(botGuid, playerGuid);
-                    if (rebuiltPairs.insert(pairKey).second)
-                    {
-                        g_BotConversationHistory[botGuid][playerGuid].clear();
-                        g_TurnTimestamps[botGuid][playerGuid].clear();
-                    }
+                uint64_t botGuid = (*arch)[0].Get<uint64_t>();
+                uint64_t playerGuid = (*arch)[1].Get<uint64_t>();
+                ArchiveTurn turn;
+                turn.playerMsg = (*arch)[2].Get<std::string>();
+                turn.botReply = (*arch)[3].Get<std::string>();
+                turn.at = (*arch)[4].IsNull() ? time(nullptr) : static_cast<time_t>((*arch)[4].Get<uint64_t>());
+                auto& pair = g_PairMemory[botGuid][playerGuid];
+                pair.archiveRing.push_back(std::move(turn));
+                while (pair.archiveRing.size() > OllamaMemory::ArchiveRecallWindow)
+                    pair.archiveRing.pop_front();
+            } while (arch->NextRow());
 
-                    std::string ctx = (*epResult)[2].Get<std::string>();
-                    std::string reply = (*epResult)[3].Get<std::string>();
-                    time_t ts = (*epResult)[4].IsNull() ? time(nullptr) : static_cast<time_t>((*epResult)[4].Get<uint64_t>());
-                    g_BotConversationHistory[botGuid][playerGuid].push_back({ ctx, reply, true });
-                    g_TurnTimestamps[botGuid][playerGuid].push_back(ts);
-
-                    auto& hist = g_BotConversationHistory[botGuid][playerGuid];
-                    while (hist.size() > OllamaMemory::DequeCap)
-                    {
-                        hist.pop_front();
-                        g_TurnTimestamps[botGuid][playerGuid].pop_front();
-                    }
-                } while (epResult->NextRow());
-            }
-
-            for (auto const& [botGuid, playerMap] : g_BotConversationHistory)
+            for (auto& [botGuid, playerMap] : g_PairMemory)
             {
-                for (auto const& [playerGuid, hist] : playerMap)
+                for (auto& [playerGuid, pair] : playerMap)
                 {
-                    if (!hist.empty())
-                        g_CompactedTurnCount[botGuid][playerGuid] = 0;
+                    while (pair.archiveRing.size() > OllamaMemory::ArchiveRingCap)
+                        pair.archiveRing.pop_front();
                 }
             }
         }
 
-        // Legacy table backfill for pairs without episodic rows.
+        std::unordered_set<uint64_t> rebuiltPairs;
+        if (QueryResult epResult = CharacterDatabase.Query(
+                "SELECT bot_guid, player_guid, context, bot_reply, UNIX_TIMESTAMP(created_at) "
+                "FROM mod_ollama_chat_memory_episodic ORDER BY created_at ASC"))
+        {
+            do
+            {
+                uint64_t botGuid = (*epResult)[0].Get<uint64_t>();
+                uint64_t playerGuid = (*epResult)[1].Get<uint64_t>();
+                uint64_t pairKey = MemoryPairKey(botGuid, playerGuid);
+                if (rebuiltPairs.insert(pairKey).second)
+                {
+                    g_BotConversationHistory[botGuid][playerGuid].clear();
+                    g_TurnTimestamps[botGuid][playerGuid].clear();
+                }
+
+                std::string ctx = (*epResult)[2].Get<std::string>();
+                std::string reply = (*epResult)[3].Get<std::string>();
+                time_t ts = (*epResult)[4].IsNull() ? time(nullptr) : static_cast<time_t>((*epResult)[4].Get<uint64_t>());
+                g_BotConversationHistory[botGuid][playerGuid].push_back({ ctx, reply, true });
+                g_TurnTimestamps[botGuid][playerGuid].push_back(ts);
+
+                auto& hist = g_BotConversationHistory[botGuid][playerGuid];
+                while (hist.size() > OllamaMemory::DequeCap)
+                {
+                    hist.pop_front();
+                    g_TurnTimestamps[botGuid][playerGuid].pop_front();
+                }
+            } while (epResult->NextRow());
+        }
+
+        for (auto const& [botGuid, playerMap] : g_BotConversationHistory)
+        {
+            for (auto const& [playerGuid, hist] : playerMap)
+            {
+                if (!hist.empty() && !g_CompactedTurnCount.count(botGuid))
+                    g_CompactedTurnCount[botGuid][playerGuid] = 0;
+                else if (!hist.empty() && !g_CompactedTurnCount[botGuid].count(playerGuid))
+                    g_CompactedTurnCount[botGuid][playerGuid] = 0;
+            }
+        }
+
         if (QueryResult legacy = CharacterDatabase.Query(
                 "SELECT bot_guid, player_guid, player_message, bot_reply, UNIX_TIMESTAMP(timestamp) "
                 "FROM mod_ollama_chat_history ORDER BY timestamp ASC"))
@@ -992,16 +1168,19 @@ bool SaveBotMemoryToDB(bool blocking)
 {
     if (!g_EnableMemory)
         return false;
+    // Only the shutdown path waits for workers. The periodic save runs on the
+    // world thread and must not sleep there.
     if (blocking)
         WaitForMemoryWorkersBlocking();
-    else
-        WaitForMemoryWorkers();
 
     struct SemanticSaveRow
     {
         uint64_t botGuid;
         uint64_t playerGuid;
-        std::string memText;
+        std::string facts;
+        std::string notes;
+        std::string playerName;
+        time_t lastPlayerAt;
         uint32_t watermark;
     };
 
@@ -1012,78 +1191,72 @@ bool SaveBotMemoryToDB(bool blocking)
         std::vector<std::pair<std::string, std::string>> pendingTurns;
     };
 
-    struct ArchiveSaveRow
-    {
-        uint64_t botGuid;
-        uint64_t playerGuid;
-        std::vector<std::pair<std::string, std::string>> turns;
-    };
-
     std::vector<SemanticSaveRow> semanticRows;
     std::vector<EpisodicSaveRow> episodicRows;
-    std::vector<ArchiveSaveRow> archiveRows;
+    std::set<std::pair<uint64_t, uint64_t>> trimPairs;
 
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
 
-        for (auto const& [botGuid, playerMap] : g_SemanticMemory)
+        for (auto const& [botGuid, playerMap] : g_PairMemory)
         {
-            for (auto const& [playerGuid, memText] : playerMap)
+            for (auto const& [playerGuid, pair] : playerMap)
             {
                 semanticRows.push_back({
                     botGuid,
                     playerGuid,
-                    memText,
+                    pair.facts,
+                    pair.notes,
+                    pair.playerName,
+                    pair.lastPlayerAt,
                     GetWatermark(botGuid, playerGuid)
                 });
+                trimPairs.emplace(botGuid, playerGuid);
             }
         }
 
-        if (g_PersistEpisodicMemory)
+        for (auto const& [botGuid, playerMap] : g_BotConversationHistory)
         {
-            for (auto const& [botGuid, playerMap] : g_BotConversationHistory)
+            for (auto const& [playerGuid, hist] : playerMap)
             {
-                for (auto const& [playerGuid, hist] : playerMap)
-                {
-                    uint32_t wm = GetWatermark(botGuid, playerGuid);
-                    if (wm >= hist.size())
-                        continue;
-
-                    EpisodicSaveRow row;
-                    row.botGuid = botGuid;
-                    row.playerGuid = playerGuid;
-                    row.pendingTurns.reserve(hist.size() - wm);
-                    for (size_t i = wm; i < hist.size(); ++i)
-                        row.pendingTurns.push_back({ hist[i].playerMessage, hist[i].botReply });
-                    episodicRows.push_back(std::move(row));
-                }
-            }
-        }
-
-        for (auto const& [botGuid, playerMap] : g_ArchivePending)
-        {
-            for (auto const& [playerGuid, turns] : playerMap)
-            {
-                if (turns.empty())
+                uint32_t wm = GetWatermark(botGuid, playerGuid);
+                if (wm >= hist.size())
                     continue;
-                archiveRows.push_back({ botGuid, playerGuid, turns });
+
+                EpisodicSaveRow row;
+                row.botGuid = botGuid;
+                row.playerGuid = playerGuid;
+                row.pendingTurns.reserve(hist.size() - wm);
+                for (size_t i = wm; i < hist.size(); ++i)
+                    row.pendingTurns.push_back({ hist[i].playerMessage, hist[i].botReply });
+                episodicRows.push_back(std::move(row));
+                trimPairs.emplace(botGuid, playerGuid);
             }
         }
     }
 
+    // Batch every pair into one transaction so each cycle does a single commit
+    // rather than one blocking commit per pair.
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
     for (auto const& row : semanticRows)
     {
-        std::string escMem = row.memText;
-        CharacterDatabase.EscapeString(escMem);
-        MemoryExecute(SafeFormat(
-            "UPDATE mod_ollama_chat_memory_semantic SET memory_text = '{}', compacted_turn_count = {} "
-            "WHERE bot_guid = {} AND player_guid = {}",
-            escMem, row.watermark, row.botGuid, row.playerGuid), "save semantic");
+        std::string escFacts = row.facts;
+        std::string escNotes = row.notes;
+        std::string escName = row.playerName.empty() ? GetStoredPlayerName(row.botGuid, row.playerGuid) : row.playerName;
+        CharacterDatabase.EscapeString(escFacts);
+        CharacterDatabase.EscapeString(escNotes);
+        CharacterDatabase.EscapeString(escName);
+        std::string lastAtSql = row.lastPlayerAt ? SafeFormat("FROM_UNIXTIME({})", static_cast<uint64_t>(row.lastPlayerAt)) : "NULL";
+        trans->Append(SafeFormat(
+            "REPLACE INTO mod_ollama_chat_memory_semantic (bot_guid, player_guid, player_name, facts_text, notes_text, "
+            "last_player_at, compacted_turn_count, last_compacted_at) VALUES "
+            "({}, {}, '{}', '{}', '{}', {}, {}, NOW())",
+            row.botGuid, row.playerGuid, escName, escFacts, escNotes, lastAtSql, row.watermark));
     }
 
     for (auto const& row : episodicRows)
     {
-        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
         trans->Append(SafeFormat(
             "DELETE FROM mod_ollama_chat_memory_episodic WHERE bot_guid = {} AND player_guid = {}",
             row.botGuid, row.playerGuid));
@@ -1101,137 +1274,109 @@ bool SaveBotMemoryToDB(bool blocking)
                 "VALUES ({}, {}, '{}', '{}', '{}')",
                 row.botGuid, row.playerGuid, escName, escCtx, escReply));
         }
-        MemoryCommit(trans, "save episodic");
     }
 
-    std::vector<std::pair<uint64_t, uint64_t>> flushedArchive;
-    for (auto const& row : archiveRows)
-    {
-        InsertArchiveTurnsToDB(row.botGuid, row.playerGuid, row.turns);
-        flushedArchive.emplace_back(row.botGuid, row.playerGuid);
-    }
-    if (!flushedArchive.empty())
-    {
-        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-        for (auto const& [botGuid, playerGuid] : flushedArchive)
-        {
-            auto botIt = g_ArchivePending.find(botGuid);
-            if (botIt != g_ArchivePending.end())
-                botIt->second.erase(playerGuid);
-        }
-    }
-
-    std::set<std::pair<uint64_t, uint64_t>> trimPairs;
-    for (auto const& row : semanticRows)
-        trimPairs.emplace(row.botGuid, row.playerGuid);
-    for (auto const& row : episodicRows)
-        trimPairs.emplace(row.botGuid, row.playerGuid);
-    for (auto const& row : archiveRows)
-        trimPairs.emplace(row.botGuid, row.playerGuid);
     for (auto const& [botGuid, playerGuid] : trimPairs)
-        TrimArchivePair(botGuid, playerGuid);
+        trans->Append(ArchiveTrimSql(botGuid, playerGuid));
+
+    if (blocking)
+        MemoryCommit(trans, "save memory");
+    else
+        MemoryCommitAsync(trans);
     return true;
 }
 
 MemoryCompactionEnqueueResult EnqueueMemoryCompaction(uint64_t botGuid, uint64_t playerGuid, bool force)
 {
     if (!g_EnableMemory)
-        return MemoryCompactionEnqueueResult::NothingToCompact;
+        return MemoryCompactionEnqueueResult::NothingPending;
 
-    uint64_t key = MemoryJobKey(MemoryJobType::Compact, botGuid, playerGuid);
+    uint64_t key = MemoryJobKey(MemoryJobType::Maintenance, botGuid, playerGuid);
+    uint32_t pending = 0;
 
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-        if (force)
+        pending = PendingCountUnlocked(botGuid, playerGuid);
+        if (force && pending == 0)
         {
-            auto botIt = g_BotConversationHistory.find(botGuid);
-            uint32_t pending = 0;
-            if (botIt != g_BotConversationHistory.end())
-            {
-                auto playerIt = botIt->second.find(playerGuid);
-                if (playerIt != botIt->second.end())
-                {
-                    uint32_t wm = GetWatermark(botGuid, playerGuid);
-                    if (playerIt->second.size() > wm)
-                        pending = static_cast<uint32_t>(playerIt->second.size() - wm);
-                }
-            }
-            if (pending == 0)
-            {
-                LOG_WARN("server.loading", "[OllamaChat] Force compact skipped: no pending turns bot {} player {}",
-                    botGuid, playerGuid);
-                return MemoryCompactionEnqueueResult::NothingToCompact;
-            }
+            LOG_WARN("server.loading", "[OllamaChat] Force maintenance skipped: no pending turns bot {} player {}",
+                botGuid, playerGuid);
+            return MemoryCompactionEnqueueResult::NothingPending;
         }
-        else if (!ShouldCompactUnlocked(botGuid, playerGuid))
-            return MemoryCompactionEnqueueResult::NothingToCompact;
+        if (!force && !ShouldRunMaintenanceUnlocked(botGuid, playerGuid))
+            return MemoryCompactionEnqueueResult::NothingPending;
     }
 
-    if (!force && IsCompactionOnCooldown(botGuid, playerGuid))
-        return MemoryCompactionEnqueueResult::NothingToCompact;
+    if (!force && IsMaintenanceFailCooldown(botGuid, playerGuid) && pending < OllamaMemory::CompactionThreshold)
+        return MemoryCompactionEnqueueResult::NothingPending;
 
     std::lock_guard<std::mutex> lock(g_MemoryQueueMutex);
-    if (g_MemoryCompactionQueue.size() >= OllamaMemory::MaxCompactionQueue)
-        return MemoryCompactionEnqueueResult::NothingToCompact;
-    if (g_MemoryCompactionPending.count(key))
+    if (g_MemoryMaintenancePending.count(key))
         return MemoryCompactionEnqueueResult::AlreadyPending;
-    g_MemoryCompactionPending.insert(key);
-    g_MemoryCompactionQueue.push_back({ MemoryJobType::Compact, botGuid, playerGuid });
+
+    if (g_MemoryMaintenanceQueue.size() >= OllamaMemory::MaxCompactionQueue)
+        g_MemoryMaintenanceQueue.pop_back();
+
+    bool online = !IsPlayerOffline(playerGuid);
+    MemoryJob job{ MemoryJobType::Maintenance, botGuid, playerGuid };
+    if (online)
+        g_MemoryMaintenanceQueue.push_front(job);
+    else
+        g_MemoryMaintenanceQueue.push_back(job);
+
+    g_MemoryMaintenancePending.insert(key);
     return MemoryCompactionEnqueueResult::Enqueued;
 }
 
-void MaybeEnqueueMemoryCompaction(uint64_t botGuid, uint64_t playerGuid)
-{
-    EnqueueMemoryCompaction(botGuid, playerGuid, false);
-}
-
-void MaybeEnqueueMemoryNudge(uint64_t botGuid, uint64_t playerGuid, std::string const& playerMessage, bool isEvent)
+void MaybeEnqueueMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
 {
     if (!g_EnableMemory)
-        return;
-    if (!isEvent && IsTrivialTurn(playerMessage))
         return;
 
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-        time_t now = time(nullptr);
-        auto nudgeIt = g_LastNudgeTime.find(botGuid);
-        if (nudgeIt != g_LastNudgeTime.end())
+        if (!ShouldRunMaintenanceUnlocked(botGuid, playerGuid))
+            return;
+        if (AllPendingTrivialUnlocked(botGuid, playerGuid))
+            return;
+
+        uint32_t pending = PendingCountUnlocked(botGuid, playerGuid);
+        if (PairMemoryState* pair = GetPairUnlocked(botGuid, playerGuid))
         {
-            auto lastIt = nudgeIt->second.find(playerGuid);
-            if (lastIt != nudgeIt->second.end() &&
-                difftime(now, lastIt->second) < static_cast<double>(OllamaMemory::NudgeMinIntervalSeconds))
+            if (IsMaintenanceOnCooldown(*pair) && pending < OllamaMemory::CompactionThreshold)
                 return;
         }
     }
 
-    uint64_t key = MemoryJobKey(MemoryJobType::Nudge, botGuid, playerGuid);
-    std::lock_guard<std::mutex> lock(g_MemoryQueueMutex);
-    if (g_MemoryCompactionQueue.size() >= OllamaMemory::MaxCompactionQueue)
-        return;
-    if (g_MemoryCompactionPending.count(key))
-        return;
-    g_MemoryCompactionPending.insert(key);
-    g_MemoryCompactionQueue.push_back({ MemoryJobType::Nudge, botGuid, playerGuid });
+    EnqueueMemoryCompaction(botGuid, playerGuid, false);
 }
 
 void AppendBotMemoryTurn(uint64_t botGuid, uint64_t playerGuid, std::string const& playerMessage,
-    std::string const& botReply, bool isEvent, bool verified)
+    std::string const& botReply, bool /*isEvent*/, bool verified)
 {
     std::vector<std::pair<std::string, std::string>> toFlush;
+    time_t now = time(nullptr);
 
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
         auto& hist = g_BotConversationHistory[botGuid][playerGuid];
         hist.push_back({ playerMessage, botReply, verified });
-        g_TurnTimestamps[botGuid][playerGuid].push_back(time(nullptr));
-        g_ArchivePending[botGuid][playerGuid].push_back({ playerMessage, botReply });
+        g_TurnTimestamps[botGuid][playerGuid].push_back(now);
+
+        PairMemoryState& pair = TouchPairUnlocked(botGuid, playerGuid);
+        pair.lastPlayerAt = now;
+        if (pair.playerName.empty())
+        {
+            if (Player* player = ObjectAccessor::FindPlayer(ObjectGuid(playerGuid)))
+                pair.playerName = player->GetName();
+        }
 
         while (hist.size() > OllamaMemory::DequeCap)
         {
-            std::pair<std::string, std::string> turn;
-            if (PopArchivePendingForDequeEviction(botGuid, playerGuid, hist.size(), turn))
-                toFlush.push_back(std::move(turn));
+            ConversationTurn evicted = hist.front();
+            hist.pop_front();
+            PushArchiveTurnUnlocked(pair, evicted.playerMessage, evicted.botReply, now);
+            toFlush.emplace_back(evicted.playerMessage, evicted.botReply);
 
             auto& ts = g_TurnTimestamps[botGuid][playerGuid];
             if (!ts.empty())
@@ -1239,22 +1384,13 @@ void AppendBotMemoryTurn(uint64_t botGuid, uint64_t playerGuid, std::string cons
             uint32_t& wm = g_CompactedTurnCount[botGuid][playerGuid];
             if (wm > 0)
                 --wm;
-            hist.pop_front();
         }
 
-        auto& pending = g_ArchivePending[botGuid][playerGuid];
-        while (pending.size() > OllamaMemory::ArchivePendingCap)
-        {
-            toFlush.push_back(pending.front());
-            pending.erase(pending.begin());
-        }
-        if (pending.empty())
-            g_ArchivePending[botGuid].erase(playerGuid);
+        EvictPairCacheUnlocked();
     }
 
     InsertArchiveTurnsToDB(botGuid, playerGuid, toFlush);
-    MaybeEnqueueMemoryCompaction(botGuid, playerGuid);
-    MaybeEnqueueMemoryNudge(botGuid, playerGuid, playerMessage, isEvent);
+    MaybeEnqueueMemoryMaintenance(botGuid, playerGuid);
 }
 
 void ProcessMemoryCompactionTick()
@@ -1263,31 +1399,25 @@ void ProcessMemoryCompactionTick()
         return;
 
     PurgeStaleMemoryRows();
+    ProcessPairLoadTick();
 
     uint32_t toProcess = OllamaMemory::CompactionsPerTick;
     while (toProcess > 0)
     {
         MemoryJob job{};
-        if (!DequeueMemoryJob(MemoryJobType::Compact, job))
+        if (!DequeueMemoryJob(job))
             break;
 
         if (OllamaMemory::MaxConcurrentCompactions > 0 &&
-            g_MemoryCompactionInFlight.load() >= OllamaMemory::MaxConcurrentCompactions)
+            g_MemoryMaintenanceInFlight.load() >= OllamaMemory::MaxConcurrentCompactions)
         {
             std::lock_guard<std::mutex> lock(g_MemoryQueueMutex);
-            g_MemoryCompactionQueue.push_front(job);
+            g_MemoryMaintenanceQueue.push_front(job);
             break;
         }
 
         DispatchMemoryJob(job);
         --toProcess;
-    }
-
-    if (g_MemoryCompactionInFlight.load() == 0)
-    {
-        MemoryJob nudgeJob{};
-        if (DequeueMemoryJob(MemoryJobType::Nudge, nudgeJob))
-            DispatchMemoryJob(nudgeJob);
     }
 
     static time_t lastAgeSweep = 0;
@@ -1303,7 +1433,7 @@ void ProcessMemoryCompactionTick()
         {
             for (auto const& [playerGuid, hist] : playerMap)
             {
-                if (ShouldCompactUnlocked(botGuid, playerGuid))
+                if (ShouldRunMaintenanceUnlocked(botGuid, playerGuid))
                     ageSweep.emplace_back(botGuid, playerGuid);
                 if (ageSweep.size() >= 2)
                     break;
@@ -1313,71 +1443,90 @@ void ProcessMemoryCompactionTick()
         }
     }
     for (auto const& [botGuid, playerGuid] : ageSweep)
-        MaybeEnqueueMemoryCompaction(botGuid, playerGuid);
+        MaybeEnqueueMemoryMaintenance(botGuid, playerGuid);
 }
 
-std::string GetMemoryPromptAddition(uint64_t botGuid, uint64_t playerGuid, const std::string& query, const std::string& playerName)
+std::string GetMemoryPromptAddition(uint64_t botGuid, uint64_t playerGuid, ChatChannelSourceLocal channel,
+    std::string const& message, std::string const& playerName)
 {
     if (!g_EnableMemory)
         return "";
 
-    std::string blob;
+    std::string facts;
+    std::string notes;
+    std::string name;
+    std::deque<ArchiveTurn> archiveCopy;
+    time_t lastPlayerAt = 0;
+    uint32_t pending = 0;
+    bool cold = false;
+
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-        blob = GetSemanticText(botGuid, playerGuid);
+        PairMemoryState* pair = GetPairUnlocked(botGuid, playerGuid);
+        if (!pair)
+        {
+            cold = true;
+        }
+        else
+        {
+            pair->cacheLastUsed = time(nullptr);
+            facts = pair->facts;
+            notes = pair->notes;
+            name = pair->playerName;
+            lastPlayerAt = pair->lastPlayerAt;
+            archiveCopy = pair->archiveRing;
+            pending = PendingCountUnlocked(botGuid, playerGuid);
+        }
     }
 
-    MemorySections sections = ParseMemorySections(blob);
-    if (sections.profile.empty() && sections.history.empty())
-        return "";
-
-    bool const recallCue = HasRecallCue(query);
-    if (!recallCue && sections.history.empty())
-        return "";
-
-    std::string profile = sections.profile;
-    std::string history = sections.history;
-
-    if (!sections.history.empty() && OllamaMemory::RecallMaxItems > 0 &&
-        (recallCue ? sections.history.size() > 400 : true))
+    if (cold)
     {
-        std::string recalled = RetrieveRelevantMemory(
-            query, sections.history, OllamaMemory::RecallMaxItems, OllamaMemory::RecallThreshold);
-        if (!recallCue && recalled.empty())
-            return "";
-        if (!recalled.empty())
-            history = recalled;
+        EnqueuePairLoad(botGuid, playerGuid);
+        return "";
     }
 
-    std::string pastRecall = BuildArchiveRecall(botGuid, playerGuid, query);
+    if (name.empty())
+        name = playerName;
 
-    if (profile.empty() && history.empty() && pastRecall.empty())
+    if (channel == SRC_GENERAL_LOCAL)
+    {
+        if (facts.empty())
+            return "";
+        return SafeFormat(
+            kPromptTemplate,
+            fmt::arg("name", name),
+            fmt::arg("facts", facts),
+            fmt::arg("notes_line", ""),
+            fmt::arg("past_section", ""));
+    }
+
+    std::string past;
+    if (NeedsEpisodicRecall(channel, lastPlayerAt, archiveCopy, pending, message))
+    {
+        past = BuildPastRecall(lastPlayerAt, archiveCopy, message);
+        if (!past.empty())
+            past = "Past:\n" + past + "\n";
+    }
+
+    if (facts.empty() && notes.empty() && past.empty())
         return "";
 
-    if (profile.empty())
-        profile = "-";
-    if (history.empty())
-        history = "-";
+    std::string notesLine;
+    if (!notes.empty())
+        notesLine = "Notes: " + notes + "\n";
 
     return SafeFormat(
         kPromptTemplate,
-        fmt::arg("player_name", playerName),
-        fmt::arg("profile", profile),
-        fmt::arg("history", history),
-        fmt::arg("past_recall", pastRecall));
+        fmt::arg("name", name),
+        fmt::arg("facts", facts.empty() ? "-" : facts),
+        fmt::arg("notes_line", notesLine),
+        fmt::arg("past_section", past));
 }
 
 uint32_t GetPendingTurnCount(uint64_t botGuid, uint64_t playerGuid)
 {
     std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-    auto botIt = g_BotConversationHistory.find(botGuid);
-    if (botIt == g_BotConversationHistory.end())
-        return 0;
-    auto playerIt = botIt->second.find(playerGuid);
-    if (playerIt == botIt->second.end())
-        return 0;
-    uint32_t wm = GetWatermark(botGuid, playerGuid);
-    return playerIt->second.size() > wm ? static_cast<uint32_t>(playerIt->second.size() - wm) : 0;
+    return PendingCountUnlocked(botGuid, playerGuid);
 }
 
 void ResetBotMemory(uint64_t botGuid, uint64_t playerGuid)
@@ -1387,49 +1536,61 @@ void ResetBotMemory(uint64_t botGuid, uint64_t playerGuid)
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
         if (botGuid == 0 && playerGuid == 0)
         {
-            g_SemanticMemory.clear();
             g_CompactedTurnCount.clear();
             g_TurnTimestamps.clear();
-            g_LastNudgeTime.clear();
-            {
-                std::lock_guard<std::mutex> cooldownLock(g_CompactionCooldownMutex);
-                g_CompactionCooldownUntil.clear();
-            }
-            g_ArchivePending.clear();
             g_BotConversationHistory.clear();
+            g_PairMemory.clear();
+            g_PairLoadQueue.clear();
+            g_PairLoadPending.clear();
+            {
+                std::lock_guard<std::mutex> cooldownLock(g_MaintenanceFailCooldownMutex);
+                g_MaintenanceFailCooldownUntil.clear();
+            }
         }
         else if (playerGuid == 0)
         {
-            g_SemanticMemory.erase(botGuid);
             g_CompactedTurnCount.erase(botGuid);
             g_TurnTimestamps.erase(botGuid);
-            g_LastNudgeTime.erase(botGuid);
-            {
-                std::lock_guard<std::mutex> cooldownLock(g_CompactionCooldownMutex);
-                g_CompactionCooldownUntil.erase(botGuid);
-            }
-            g_ArchivePending.erase(botGuid);
             g_BotConversationHistory.erase(botGuid);
+            g_PairMemory.erase(botGuid);
+            for (auto it = g_PairLoadQueue.begin(); it != g_PairLoadQueue.end();)
+            {
+                if (it->first == botGuid)
+                {
+                    g_PairLoadPending.erase(MemoryPairKey(it->first, it->second));
+                    it = g_PairLoadQueue.erase(it);
+                }
+                else
+                    ++it;
+            }
+            {
+                std::lock_guard<std::mutex> cooldownLock(g_MaintenanceFailCooldownMutex);
+                g_MaintenanceFailCooldownUntil.erase(botGuid);
+            }
         }
         else
         {
-            if (g_SemanticMemory.count(botGuid))
-                g_SemanticMemory[botGuid].erase(playerGuid);
             if (g_CompactedTurnCount.count(botGuid))
                 g_CompactedTurnCount[botGuid].erase(playerGuid);
             if (g_TurnTimestamps.count(botGuid))
                 g_TurnTimestamps[botGuid].erase(playerGuid);
-            if (g_LastNudgeTime.count(botGuid))
-                g_LastNudgeTime[botGuid].erase(playerGuid);
-            {
-                std::lock_guard<std::mutex> cooldownLock(g_CompactionCooldownMutex);
-                if (g_CompactionCooldownUntil.count(botGuid))
-                    g_CompactionCooldownUntil[botGuid].erase(playerGuid);
-            }
-            if (g_ArchivePending.count(botGuid))
-                g_ArchivePending[botGuid].erase(playerGuid);
             if (g_BotConversationHistory.count(botGuid))
                 g_BotConversationHistory[botGuid].erase(playerGuid);
+            if (g_PairMemory.count(botGuid))
+                g_PairMemory[botGuid].erase(playerGuid);
+            g_PairLoadPending.erase(MemoryPairKey(botGuid, playerGuid));
+            for (auto it = g_PairLoadQueue.begin(); it != g_PairLoadQueue.end();)
+            {
+                if (it->first == botGuid && it->second == playerGuid)
+                    it = g_PairLoadQueue.erase(it);
+                else
+                    ++it;
+            }
+            {
+                std::lock_guard<std::mutex> cooldownLock(g_MaintenanceFailCooldownMutex);
+                if (g_MaintenanceFailCooldownUntil.count(botGuid))
+                    g_MaintenanceFailCooldownUntil[botGuid].erase(playerGuid);
+            }
         }
     }
 
@@ -1475,7 +1636,7 @@ std::vector<std::pair<uint64_t, uint64_t>> CollectMemoryPairs(uint64_t botFilter
     std::set<std::pair<uint64_t, uint64_t>> keys;
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-        for (auto const& [botGuid, playerMap] : g_SemanticMemory)
+        for (auto const& [botGuid, playerMap] : g_PairMemory)
             for (auto const& [playerGuid, _] : playerMap)
                 keys.emplace(botGuid, playerGuid);
         for (auto const& [botGuid, playerMap] : g_BotConversationHistory)
@@ -1510,6 +1671,16 @@ std::string GetStoredPlayerName(uint64_t botGuid, uint64_t playerGuid)
 {
     if (Player* player = ObjectAccessor::FindPlayer(ObjectGuid(playerGuid)))
         return player->GetName();
+
+    {
+        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
+        if (PairMemoryState* pair = GetPairUnlocked(botGuid, playerGuid))
+        {
+            if (!pair->playerName.empty())
+                return pair->playerName;
+        }
+    }
+
     if (QueryResult result = CharacterDatabase.Query(SafeFormat(
             "SELECT player_name FROM mod_ollama_chat_memory_semantic "
             "WHERE bot_guid = {} AND player_guid = {} AND player_name != '' LIMIT 1",
@@ -1529,34 +1700,30 @@ std::string GetStoredPlayerName(uint64_t botGuid, uint64_t playerGuid)
 
 std::string GetMemoryDebugInfo(uint64_t botGuid, uint64_t playerGuid)
 {
-    std::string mem;
+    std::string facts;
+    std::string notes;
     uint32_t wm = 0;
     uint32_t pending = 0;
-    uint32_t archivePending = 0;
-    MemorySections sections;
+    uint32_t archiveRing = 0;
+    time_t lastPlayerAt = 0;
+    time_t lastMaintenanceAt = 0;
+
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
-        mem = GetSemanticText(botGuid, playerGuid);
-        sections = ParseMemorySections(mem);
+        if (PairMemoryState* pair = GetPairUnlocked(botGuid, playerGuid))
+        {
+            facts = pair->facts;
+            notes = pair->notes;
+            archiveRing = static_cast<uint32_t>(pair->archiveRing.size());
+            lastPlayerAt = pair->lastPlayerAt;
+            lastMaintenanceAt = pair->lastMaintenanceAt;
+        }
         wm = GetWatermark(botGuid, playerGuid);
-        auto histIt = g_BotConversationHistory.find(botGuid);
-        if (histIt != g_BotConversationHistory.end())
-        {
-            auto pit = histIt->second.find(playerGuid);
-            if (pit != histIt->second.end() && pit->second.size() > wm)
-                pending = static_cast<uint32_t>(pit->second.size() - wm);
-        }
-        auto ap = g_ArchivePending.find(botGuid);
-        if (ap != g_ArchivePending.end())
-        {
-            auto pit = ap->second.find(playerGuid);
-            if (pit != ap->second.end())
-                archivePending = static_cast<uint32_t>(pit->second.size());
-        }
+        pending = PendingCountUnlocked(botGuid, playerGuid);
     }
 
     uint32_t archiveRows = 0;
-    std::string lastCompacted = "never";
+    std::string lastMaintenance = "never";
     if (QueryResult ar = CharacterDatabase.Query(SafeFormat(
             "SELECT COUNT(*) FROM mod_ollama_chat_memory_archive WHERE bot_guid = {} AND player_guid = {}",
             botGuid, playerGuid)))
@@ -1569,13 +1736,15 @@ std::string GetMemoryDebugInfo(uint64_t botGuid, uint64_t playerGuid)
             botGuid, playerGuid)))
     {
         if (!(*lc)[0].IsNull())
-            lastCompacted = (*lc)[0].Get<std::string>();
+            lastMaintenance = (*lc)[0].Get<std::string>();
     }
 
     return fmt::format(
-        "watermark={} pending={} archive_pending={} archive_rows={} last_compacted={}\n"
-        "[PROFILE]\n{}\n[HISTORY]\n{}",
-        wm, pending, archivePending, archiveRows, lastCompacted,
-        sections.profile.empty() ? "(empty)" : sections.profile,
-        sections.history.empty() ? "(empty)" : sections.history);
+        "watermark={} pending={} archive_ring={} archive_rows={} maint_db={} player_at={} maint_at={}\n"
+        "[FACTS]\n{}\n[NOTES]\n{}",
+        wm, pending, archiveRing, archiveRows, lastMaintenance,
+        lastPlayerAt ? std::to_string(lastPlayerAt) : "never",
+        lastMaintenanceAt ? std::to_string(lastMaintenanceAt) : "never",
+        facts.empty() ? "(empty)" : facts,
+        notes.empty() ? "(empty)" : notes);
 }

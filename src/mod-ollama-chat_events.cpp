@@ -69,9 +69,11 @@ PromptBundle BuildEventPromptBundle(Player* bot, Player* actorPlayer, std::strin
             fmt::arg("sentiment_info", sentimentInfo));
         if (g_EnableMemory && actorPlayer)
         {
+            ChatChannelSourceLocal channel = bot->GetGroup() ? SRC_PARTY_LOCAL : SRC_GENERAL_LOCAL;
             bundle.user += GetMemoryPromptAddition(
                 bot->GetGUID().GetRawValue(),
                 actorPlayer->GetGUID().GetRawValue(),
+                channel,
                 type + ": " + detail,
                 actorName) + "\n";
         }

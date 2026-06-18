@@ -173,17 +173,20 @@ void SaveBotPlayerSentimentsToDB()
     if (g_BotPlayerSentiments.empty())
         return;
     
-    // Use REPLACE INTO to update existing records or insert new ones
+    // Batch all upserts into one async transaction rather than a statement per pair.
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
     for (const auto& [botGuid, playerMap] : g_BotPlayerSentiments)
     {
         for (const auto& [playerGuid, sentimentValue] : playerMap)
         {
-            CharacterDatabase.Execute(SafeFormat(
+            trans->Append(SafeFormat(
                 "REPLACE INTO mod_ollama_chat_bot_player_sentiments (bot_guid, player_guid, sentiment_value) "
                 "VALUES ({}, {}, {:.3f})",
                 botGuid, playerGuid, sentimentValue));
         }
     }
+    if (trans->GetSize() > 0)
+        CharacterDatabase.CommitTransaction(trans);
     
     if (g_DebugEnabled)
     {

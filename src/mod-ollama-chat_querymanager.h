@@ -14,6 +14,7 @@ public:
     void setMaxConcurrentQueries(int maxQueries);
     std::future<std::string> submitQuery(std::string const& prompt);
     std::future<std::string> submitQuery(PromptBundle bundle);
+    bool ShouldDeferMemoryWork();
 
 private:
     struct QueryTask {

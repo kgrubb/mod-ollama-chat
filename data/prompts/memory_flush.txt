@@ -1,0 +1,5 @@
+Update player memory from chat. Reply only.
+[FACTS]
+One fact per line. Quest, Party, Agreed, or Player prefix. Max 8 lines.
+[NOTES]
+Player preferences only. Max 3 lines. No archetypes.

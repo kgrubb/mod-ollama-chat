@@ -15,7 +15,7 @@ enum class PromptScenario
     RandomChatter,
     EventReaction,
     SentimentAnalysis,
-    MemoryCompaction
+    MemoryMaintenance
 };
 
 enum class RandomIntent
@@ -103,11 +103,9 @@ struct ScenarioInput
     std::string intentTaskLines;
     ChatIntent chatIntent;
 
-    std::string compactionExistingMemory;
-    std::string compactionEpisodicVerified;
-    std::string compactionEpisodicUnverified;
-    std::string compactionPlayerName;
-    float compactionSentiment = 0.5f;
+    std::string maintenanceFacts;
+    std::string maintenanceNotes;
+    std::string maintenanceTurns;
 };
 
 class OllamaPromptComposer
@@ -125,8 +123,7 @@ public:
 };
 
 std::string RandomIntentTaskLine(RandomIntent intent, ChatChannelSourceLocal channel = SRC_UNDEFINED_LOCAL);
-std::string GetMemoryNudgeSystemPrompt();
-std::string GetMemoryCompactionSystemPrompt();
+std::string GetMemoryMaintenanceSystemPrompt();
 std::string GetBotHistorySection(uint64_t botGuid, uint64_t playerGuid, std::string const& playerMessage);
 std::string GetBotCompactNearbySection(Player* bot);
 ChatIntent DetectChatIntent(std::string const& message, std::vector<std::string> const& referenceNames);

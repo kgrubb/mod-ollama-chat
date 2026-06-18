@@ -52,7 +52,7 @@ void SaveBotConversationHistoryToDB();
 void AppendBotConversation(uint64_t botGuid, uint64_t playerGuid, const std::string& playerMessage, const std::string& botReply, bool isEvent = false, ChatChannelSourceLocal channel = SRC_UNDEFINED_LOCAL, bool senderIsBot = false, bool verified = true);
 
 void AppendZoneGeneralTranscript(uint32_t zoneId, std::string const& speaker, std::string const& text, bool isBot);
-std::string FormatRecentGeneralTranscript(uint32_t zoneId, size_t maxLines = 8);
+std::string FormatRecentGeneralTranscript(uint32_t zoneId, size_t maxLines = 12);
 void MarkHumanGeneralActivity(uint32_t zoneId);
 bool HumanActiveInZoneGeneralRecently(uint32_t zoneId);
 
