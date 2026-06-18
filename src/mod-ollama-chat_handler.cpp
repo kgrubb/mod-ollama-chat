@@ -451,6 +451,19 @@ void MarkHumanGeneralActivity(uint32_t zoneId)
     PruneHumanActivityLocked();
 }
 
+static void NoteHumanGeneralChat(uint32_t zoneId, std::string const& speaker, std::string const& text)
+{
+    if (zoneId == 0 || speaker.empty() || text.empty())
+        return;
+    std::lock_guard<std::mutex> lock(g_zoneTranscriptMutex);
+    auto& dq = g_zoneGeneralTranscript[zoneId];
+    dq.push_back({ speaker, text });
+    while (dq.size() > kGeneralTranscriptCap)
+        dq.pop_front();
+    g_lastHumanGeneralTime[zoneId] = time(nullptr);
+    PruneHumanActivityLocked();
+}
+
 bool HumanActiveInZoneGeneralRecently(uint32_t zoneId)
 {
     if (zoneId == 0)
@@ -1482,10 +1495,7 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
         return;
 
     if (!senderIsBot && sourceLocal == SRC_GENERAL_LOCAL)
-    {
-        AppendZoneGeneralTranscript(player->GetZoneId(), player->GetName(), msg, false);
-        MarkHumanGeneralActivity(player->GetZoneId());
-    }
+        NoteHumanGeneralChat(player->GetZoneId(), player->GetName(), msg);
 
     if (senderIsBot && sourceLocal == SRC_GENERAL_LOCAL &&
         !HumanActiveInZoneGeneralRecently(player->GetZoneId()))

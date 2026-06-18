@@ -477,20 +477,11 @@ bool OllamaPromptComposer::IsFactualQuestion(std::string const& message)
     return false;
 }
 
+ChatIntent DetectChatIntent(std::string const& message, std::vector<std::string> const& referenceNames);
+
 bool OllamaPromptComposer::IsSocialPresenceQuestion(std::string const& message)
 {
-    std::string lower = message;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    static char const* markers[] = {
-        "anyone in", "anyone here", "anybody around", "anyone at",
-        "who's in", "who is in", "anybody here", "anyone around"
-    };
-    for (char const* m : markers)
-    {
-        if (lower.find(m) != std::string::npos)
-            return true;
-    }
-    return false;
+    return DetectChatIntent(message, {}).presenceQuestion;
 }
 
 namespace
@@ -739,8 +730,8 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
                 task << "\n" << input.intentTaskLines;
             if (!input.verificationFeedback.empty())
                 task << "\nCorrection: " << input.verificationFeedback;
-            if (ctx.groupCtx.memberCount > 0 && (input.intentTaskLines.find("party") != std::string::npos ||
-                input.intentTaskLines.find("Acknowledge") != std::string::npos))
+            if (ctx.groupCtx.memberCount > 0 &&
+                (input.chatIntent.partyInvite || input.chatIntent.botReference))
                 task << "\nIf invited to party or referenced by name, respond to that before jokes.";
             break;
     }
@@ -848,6 +839,7 @@ PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string cons
     input.factualQuestion = OllamaPromptComposer::IsFactualQuestion(playerMessage);
     input.chatChannel = channel;
     input.intentTaskLines = BuildIntentTaskLines(intent);
+    input.chatIntent = intent;
     input.verificationFeedback = verificationFeedback;
 
     uint64_t botGuid = bot->GetGUID().GetRawValue();
@@ -870,7 +862,7 @@ PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string cons
     if (g_EnableMemory && !skipContext)
         input.memorySection = GetMemoryPromptAddition(botGuid, playerGuid, playerMessage, player->GetName());
 
-    if (channel == SRC_GENERAL_LOCAL || channel == SRC_PARTY_LOCAL)
+    if (channel == SRC_GENERAL_LOCAL)
         input.recentGeneralSection = FormatRecentGeneralTranscript(bot->GetZoneId());
 
     if (g_EnableRAG && g_RAGSystem && !OllamaPromptComposer::IsSocialPresenceQuestion(playerMessage))

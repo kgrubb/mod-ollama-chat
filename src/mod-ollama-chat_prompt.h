@@ -101,6 +101,7 @@ struct ScenarioInput
     ChatChannelSourceLocal chatChannel = SRC_UNDEFINED_LOCAL;
     std::string verificationFeedback;
     std::string intentTaskLines;
+    ChatIntent chatIntent;
 
     std::string compactionExistingMemory;
     std::string compactionEpisodicVerified;

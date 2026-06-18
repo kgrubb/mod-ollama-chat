@@ -5,8 +5,6 @@
 
 namespace
 {
-constexpr uint32_t kReplyVerificationMaxRetries = 1;
-
 std::string ToLower(std::string s)
 {
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });

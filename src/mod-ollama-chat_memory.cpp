@@ -276,16 +276,6 @@ static std::string RetrieveRelevantMemory(const std::string& query, const std::s
     return r;
 }
 
-static bool ShouldInjectSemanticMemory(std::string const& query, MemorySections const& sections)
-{
-    if (HasRecallCue(query))
-        return true;
-    if (sections.history.empty())
-        return false;
-    return !RetrieveRelevantMemory(
-        query, sections.history, OllamaMemory::RecallMaxItems, OllamaMemory::RecallThreshold).empty();
-}
-
 static std::string TruncateMemory(const std::string& text, uint32_t maxChars)
 {
     if (text.size() <= maxChars)
@@ -1338,16 +1328,23 @@ std::string GetMemoryPromptAddition(uint64_t botGuid, uint64_t playerGuid, const
     }
 
     MemorySections sections = ParseMemorySections(blob);
-    if (!ShouldInjectSemanticMemory(query, sections))
+    if (sections.profile.empty() && sections.history.empty())
+        return "";
+
+    bool const recallCue = HasRecallCue(query);
+    if (!recallCue && sections.history.empty())
         return "";
 
     std::string profile = sections.profile;
     std::string history = sections.history;
 
-    if (OllamaMemory::RecallMaxItems > 0 && history.size() > 400)
+    if (!sections.history.empty() && OllamaMemory::RecallMaxItems > 0 &&
+        (recallCue ? sections.history.size() > 400 : true))
     {
         std::string recalled = RetrieveRelevantMemory(
-            query, history, OllamaMemory::RecallMaxItems, OllamaMemory::RecallThreshold);
+            query, sections.history, OllamaMemory::RecallMaxItems, OllamaMemory::RecallThreshold);
+        if (!recallCue && recalled.empty())
+            return "";
         if (!recalled.empty())
             history = recalled;
     }
