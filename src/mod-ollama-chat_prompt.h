@@ -102,10 +102,12 @@ struct ScenarioInput
     std::string verificationFeedback;
     std::string intentTaskLines;
     ChatIntent chatIntent;
+    bool triggerSenderIsBot = false;
 
     std::string maintenanceFacts;
     std::string maintenanceNotes;
     std::string maintenanceTurns;
+    std::string maintenancePlayerName;
 };
 
 class OllamaPromptComposer

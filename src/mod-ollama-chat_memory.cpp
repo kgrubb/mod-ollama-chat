@@ -205,6 +205,42 @@ static std::string MigrateLegacyMemoryText(std::string const& memoryText)
     return notes;
 }
 
+static std::string TrimMemoryLine(std::string const& line)
+{
+    size_t start = line.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos)
+        return "";
+    size_t end = line.find_last_not_of(" \t\r\n");
+    return line.substr(start, end - start + 1);
+}
+
+static bool IsMaintenancePlaceholder(std::string const& s)
+{
+    return s == "(none)" || s == "N/A";
+}
+
+static std::string StripMaintenancePlaceholders(std::string s)
+{
+    s = TrimMemoryLine(s);
+    if (s.empty() || IsMaintenancePlaceholder(s))
+        return "";
+    std::ostringstream out;
+    std::istringstream ss(s);
+    std::string line;
+    bool first = true;
+    while (std::getline(ss, line))
+    {
+        line = TrimMemoryLine(line);
+        if (line.empty() || IsMaintenancePlaceholder(line))
+            continue;
+        if (!first)
+            out << '\n';
+        out << line;
+        first = false;
+    }
+    return out.str();
+}
+
 static bool ParseMaintenanceResponse(std::string const& raw, std::string& facts, std::string& notes)
 {
     std::string s = TrimMemoryResponse(raw);
@@ -214,8 +250,8 @@ static bool ParseMaintenanceResponse(std::string const& raw, std::string& facts,
     size_t nPos = s.find(kNotesMarker);
     if (fPos == std::string::npos && nPos == std::string::npos)
         return false;
-    facts = ExtractSection(s, kFactsMarker, kNotesMarker);
-    notes = ExtractSection(s, kNotesMarker, nullptr);
+    facts = StripMaintenancePlaceholders(ExtractSection(s, kFactsMarker, kNotesMarker));
+    notes = StripMaintenancePlaceholders(ExtractSection(s, kNotesMarker, nullptr));
     return true;
 }
 
@@ -243,6 +279,20 @@ static std::vector<std::string> Tokenize(std::string const& text)
             tokens.push_back(tok);
     }
     return tokens;
+}
+
+static std::vector<std::string> SplitFactLines(std::string const& facts)
+{
+    std::vector<std::string> lines;
+    std::istringstream ss(facts);
+    std::string line;
+    while (std::getline(ss, line))
+    {
+        line = TrimMemoryLine(line);
+        if (!line.empty())
+            lines.push_back(std::move(line));
+    }
+    return lines;
 }
 
 static std::string ArchiveDoc(ArchiveTurn const& turn)
@@ -632,7 +682,11 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
 
     Player* bot = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
     Player* player = ObjectAccessor::FindPlayer(ObjectGuid(playerGuid));
-    std::string playerName = player ? player->GetName() : (storedName.empty() ? "Player" : storedName);
+    std::string playerName = player ? player->GetName() : storedName;
+    if (playerName.empty())
+        playerName = GetStoredPlayerName(botGuid, playerGuid);
+    if (playerName.empty())
+        return false;
     std::string botName = bot ? bot->GetName() : "Bot";
 
     std::ostringstream turnsBlock;
@@ -643,6 +697,7 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
     input.maintenanceFacts = existingFacts;
     input.maintenanceNotes = existingNotes;
     input.maintenanceTurns = turnsBlock.str();
+    input.maintenancePlayerName = playerName;
 
     PromptBundle bundle = OllamaPromptComposer::Build(PromptScenario::MemoryMaintenance, {}, input);
     bundle.maxTokens = OllamaMemory::MemoryQueryMaxTokens;
@@ -1492,10 +1547,13 @@ std::string GetMemoryPromptAddition(uint64_t botGuid, uint64_t playerGuid, ChatC
     {
         if (facts.empty())
             return "";
+        std::string filtered = RetrieveBM25(message, SplitFactLines(facts), 3);
+        if (filtered.empty())
+            return "";
         return SafeFormat(
             kPromptTemplate,
             fmt::arg("name", name),
-            fmt::arg("facts", facts),
+            fmt::arg("facts", filtered),
             fmt::arg("notes_line", ""),
             fmt::arg("past_section", ""));
     }

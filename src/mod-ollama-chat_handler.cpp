@@ -364,6 +364,48 @@ bool IsBotGeneralLine(std::string const& msg)
     return true;
 }
 
+constexpr size_t kGeneralBurstCap = 256;
+constexpr time_t kGeneralBurstTtl = 2;
+
+std::unordered_map<uint64_t, GeneralHopEntry> g_generalBurstMap;
+std::mutex g_generalBurstMutex;
+
+uint64_t HashGeneralBurst(uint64_t botGuid, uint64_t playerGuid, std::string const& msg)
+{
+    uint64_t h = botGuid;
+    h ^= playerGuid + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+    h ^= static_cast<uint64_t>(HashGeneralMsg(msg)) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+    return h;
+}
+
+void PruneGeneralBurstLocked()
+{
+    time_t now = time(nullptr);
+    for (auto it = g_generalBurstMap.begin(); it != g_generalBurstMap.end();)
+    {
+        if (difftime(now, it->second.expiry) > 0)
+            it = g_generalBurstMap.erase(it);
+        else
+            ++it;
+    }
+    while (g_generalBurstMap.size() > kGeneralBurstCap)
+        g_generalBurstMap.erase(g_generalBurstMap.begin());
+}
+
+bool TryMarkGeneralBurst(uint64_t botGuid, uint64_t playerGuid, std::string const& msg)
+{
+    if (msg.empty())
+        return true;
+    std::lock_guard<std::mutex> lock(g_generalBurstMutex);
+    PruneGeneralBurstLocked();
+    uint64_t const key = HashGeneralBurst(botGuid, playerGuid, msg);
+    auto it = g_generalBurstMap.find(key);
+    if (it != g_generalBurstMap.end() && difftime(it->second.expiry, time(nullptr)) > 0)
+        return false;
+    g_generalBurstMap[key] = { time(nullptr) + kGeneralBurstTtl };
+    return true;
+}
+
 bool DeliverGeneralChat(Player* bot, std::string const& line, Channel* channel)
 {
     if (!bot || !channel || line.empty())
@@ -393,6 +435,7 @@ struct GeneralTranscriptLine
 {
     std::string speaker;
     std::string text;
+    bool isBot = false;
 };
 
 std::unordered_map<uint32_t, std::deque<GeneralTranscriptLine>> g_zoneGeneralTranscript;
@@ -412,13 +455,13 @@ void PruneHumanActivityLocked()
 }
 } // namespace
 
-void AppendZoneGeneralTranscript(uint32_t zoneId, std::string const& speaker, std::string const& text, bool /*isBot*/)
+void AppendZoneGeneralTranscript(uint32_t zoneId, std::string const& speaker, std::string const& text, bool isBot)
 {
     if (zoneId == 0 || speaker.empty() || text.empty())
         return;
     std::lock_guard<std::mutex> lock(g_zoneTranscriptMutex);
     auto& dq = g_zoneGeneralTranscript[zoneId];
-    dq.push_back({ speaker, text });
+    dq.push_back({ speaker, text, isBot });
     while (dq.size() > kGeneralTranscriptCap)
         dq.pop_front();
 }
@@ -437,7 +480,7 @@ std::string FormatRecentGeneralTranscript(uint32_t zoneId, size_t maxLines)
     {
         if (i > start)
             ss << '\n';
-        ss << dq[i].speaker << ": " << dq[i].text;
+        ss << dq[i].speaker << " (" << (dq[i].isBot ? "bot" : "player") << "): " << dq[i].text;
     }
     return ss.str();
 }
@@ -453,15 +496,8 @@ void MarkHumanGeneralActivity(uint32_t zoneId)
 
 static void NoteHumanGeneralChat(uint32_t zoneId, std::string const& speaker, std::string const& text)
 {
-    if (zoneId == 0 || speaker.empty() || text.empty())
-        return;
-    std::lock_guard<std::mutex> lock(g_zoneTranscriptMutex);
-    auto& dq = g_zoneGeneralTranscript[zoneId];
-    dq.push_back({ speaker, text });
-    while (dq.size() > kGeneralTranscriptCap)
-        dq.pop_front();
-    g_lastHumanGeneralTime[zoneId] = time(nullptr);
-    PruneHumanActivityLocked();
+    AppendZoneGeneralTranscript(zoneId, speaker, text, false);
+    MarkHumanGeneralActivity(zoneId);
 }
 
 bool HumanActiveInZoneGeneralRecently(uint32_t zoneId)
@@ -513,7 +549,7 @@ bool TrySendGeneralChat(Player* bot, std::string& response, std::string const& t
 
 void AppendBotConversation(uint64_t botGuid, uint64_t playerGuid, const std::string& playerMessage, const std::string& botReply, bool isEvent, ChatChannelSourceLocal channel, bool senderIsBot, bool verified)
 {
-    if (channel == SRC_GENERAL_LOCAL && senderIsBot)
+    if (senderIsBot)
         return;
 
     if (g_EnableMemory)
@@ -2053,6 +2089,9 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
         std::string msgCopy = msg;
         ChatIntent intent = DetectChatIntent(msgCopy, CollectReferenceNames(bot, candidateBots));
 
+        if (sourceLocal == SRC_GENERAL_LOCAL && !TryMarkGeneralBurst(botGuid, senderGuid, msgCopy))
+            continue;
+
         std::thread([botGuid, senderGuid, msgCopy, sourceLocal, channelId = (channel ? channel->GetChannelId() : 0), channelName = (channel ? channel->GetName() : ""), intent]() {
             try {
                 Player* botPtr = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
@@ -2083,7 +2122,11 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                     promptBundle = BuildPlayerChatPrompt(botPtr, senderPtr, msgCopy, sourceLocal, intent, vr.feedback);
                     responseFuture = SubmitQuery(std::move(promptBundle));
                     if (responseFuture.valid())
+                    {
                         response = responseFuture.get();
+                        vr = VerifyReply(intent, msgCopy, response, sourceLocal);
+                        firstPassVerified = vr.pass;
+                    }
                 }
 
                 botPtr = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));

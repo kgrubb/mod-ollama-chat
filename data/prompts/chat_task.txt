@@ -1,2 +1,3 @@
-Reply to the player's latest message only. Output the in-character reply with no prefix or explanation.
+Reply to the Trigger line only. Output the in-character reply with no prefix or explanation.
 Answer what was asked before adding personality or banter.
+RecentGeneral is background context only, not your cue to reply.

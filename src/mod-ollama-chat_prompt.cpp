@@ -631,6 +631,13 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
     if (scenario == PromptScenario::MemoryMaintenance)
     {
         bundle.system = GetMemoryMaintenanceSystemPrompt();
+        if (!input.maintenancePlayerName.empty())
+        {
+            std::string const token = "{playerName}";
+            for (size_t pos = 0; (pos = bundle.system.find(token, pos)) != std::string::npos;
+                 pos += input.maintenancePlayerName.size())
+                bundle.system.replace(pos, token.size(), input.maintenancePlayerName);
+        }
         std::ostringstream u;
         u << "Facts:\n" << (input.maintenanceFacts.empty() ? "(none)" : input.maintenanceFacts) << "\n\n";
         u << "Notes:\n" << (input.maintenanceNotes.empty() ? "(none)" : input.maintenanceNotes) << "\n\n";
@@ -705,7 +712,13 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
             break;
         case PromptScenario::PlayerChat:
         default:
-            if (!ctx.playerName.empty())
+            if (input.chatChannel == SRC_GENERAL_LOCAL && !ctx.playerName.empty())
+            {
+                task << "[General] " << ctx.playerName << " ("
+                     << (input.triggerSenderIsBot ? "bot" : "player") << "): \""
+                     << input.playerMessage << "\"\n";
+            }
+            else if (!ctx.playerName.empty())
             {
                 task << "[" << ChannelLabel(input.chatChannel) << "] " << ctx.playerName << " (L"
                      << ctx.playerLevel << " " << ctx.playerRace << " " << ctx.playerClass;
@@ -843,6 +856,7 @@ PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string cons
         senderIsBot = pai && pai->IsBotAI();
     }
     bool const skipContext = channel == SRC_GENERAL_LOCAL && senderIsBot;
+    input.triggerSenderIsBot = senderIsBot;
 
     if (!skipContext)
         input.chatHistorySection = GetBotHistorySection(botGuid, playerGuid, playerMessage);
