@@ -72,6 +72,7 @@ struct ArchiveTurn
 
 struct PairMemoryState
 {
+    std::string summary;
     std::string facts;
     std::string notes;
     std::string playerName;
@@ -88,6 +89,7 @@ std::unordered_set<uint64_t> g_PairLoadPending;
 std::unordered_map<uint64_t, std::unordered_map<uint64_t, time_t>> g_MaintenanceFailCooldownUntil;
 std::mutex g_MaintenanceFailCooldownMutex;
 
+constexpr char kSummaryMarker[] = "[SUMMARY]";
 constexpr char kFactsMarker[] = "[FACTS]";
 constexpr char kNotesMarker[] = "[NOTES]";
 constexpr char kProfileMarker[] = "[PROFILE]";
@@ -95,9 +97,16 @@ constexpr char kHistoryMarker[] = "[HISTORY]";
 
 constexpr char kPromptTemplate[] =
     "Memory of {name}:\n"
+    "{summary_line}"
     "Facts: {facts}\n"
     "{notes_line}"
     "{past_section}";
+
+static bool LooksLikeLegacyMemoryText(std::string const& memoryText)
+{
+    return memoryText.find(kHistoryMarker) != std::string::npos ||
+        memoryText.find(kProfileMarker) != std::string::npos;
+}
 
 uint64_t MemoryPairKey(uint64_t botGuid, uint64_t playerGuid)
 {
@@ -241,15 +250,17 @@ static std::string StripMaintenancePlaceholders(std::string s)
     return out.str();
 }
 
-static bool ParseMaintenanceResponse(std::string const& raw, std::string& facts, std::string& notes)
+static bool ParseMaintenanceResponse(std::string const& raw, std::string& summary, std::string& facts, std::string& notes)
 {
     std::string s = TrimMemoryResponse(raw);
     if (s.empty())
         return false;
+    size_t sPos = s.find(kSummaryMarker);
     size_t fPos = s.find(kFactsMarker);
     size_t nPos = s.find(kNotesMarker);
-    if (fPos == std::string::npos && nPos == std::string::npos)
+    if (sPos == std::string::npos && fPos == std::string::npos && nPos == std::string::npos)
         return false;
+    summary = StripMaintenancePlaceholders(ExtractSection(s, kSummaryMarker, kFactsMarker));
     facts = StripMaintenancePlaceholders(ExtractSection(s, kFactsMarker, kNotesMarker));
     notes = StripMaintenancePlaceholders(ExtractSection(s, kNotesMarker, nullptr));
     return true;
@@ -642,6 +653,7 @@ static bool DequeueMemoryJob(MemoryJob& job)
 static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
 {
     std::vector<ConversationTurn> pendingTurns;
+    std::string existingSummary;
     std::string existingFacts;
     std::string existingNotes;
     std::string storedName;
@@ -667,6 +679,7 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
 
         if (PairMemoryState* pair = GetPairUnlocked(botGuid, playerGuid))
         {
+            existingSummary = pair->summary;
             existingFacts = pair->facts;
             existingNotes = pair->notes;
             storedName = pair->playerName;
@@ -694,6 +707,7 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
         AppendDialogueTurn(turnsBlock, playerName, botName, turn, !turn.verified);
 
     ScenarioInput input;
+    input.maintenanceSummary = existingSummary;
     input.maintenanceFacts = existingFacts;
     input.maintenanceNotes = existingNotes;
     input.maintenanceTurns = turnsBlock.str();
@@ -704,16 +718,20 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
     auto future = SubmitQuery(bundle);
     std::string response = future.valid() ? future.get() : "";
 
+    std::string newSummary = existingSummary;
     std::string newFacts = existingFacts;
     std::string newNotes = existingNotes;
     bool parsed = false;
     if (!response.empty())
     {
+        std::string llmSummary;
         std::string llmFacts;
         std::string llmNotes;
-        parsed = ParseMaintenanceResponse(response, llmFacts, llmNotes);
+        parsed = ParseMaintenanceResponse(response, llmSummary, llmFacts, llmNotes);
         if (parsed)
         {
+            if (!llmSummary.empty())
+                newSummary = llmSummary;
             if (!llmFacts.empty())
                 newFacts = llmFacts;
             if (!llmNotes.empty())
@@ -722,6 +740,7 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
     }
 
     bool const failed = response.empty() || !parsed;
+    newSummary = TruncateMemory(newSummary, OllamaMemory::NotesMaxChars);
     newFacts = TruncateMemory(newFacts, OllamaMemory::FactsMaxChars);
     newNotes = TruncateMemory(newNotes, OllamaMemory::NotesMaxChars);
 
@@ -744,11 +763,13 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
         PairMemoryState& pair = TouchPairUnlocked(botGuid, playerGuid);
         if (failed)
         {
+            newSummary = existingSummary;
             newFacts = existingFacts;
             newNotes = existingNotes;
         }
         else
         {
+            pair.summary = newSummary;
             pair.facts = newFacts;
             pair.notes = newNotes;
             pair.lastMaintenanceAt = now;
@@ -783,9 +804,11 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
             botGuid, playerGuid, response.empty() ? "empty LLM response" : "parse fail");
     }
 
+    std::string escSummary = newSummary;
     std::string escFacts = newFacts;
     std::string escNotes = newNotes;
     std::string escName = playerName;
+    CharacterDatabase.EscapeString(escSummary);
     CharacterDatabase.EscapeString(escFacts);
     CharacterDatabase.EscapeString(escNotes);
     CharacterDatabase.EscapeString(escName);
@@ -818,10 +841,10 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
         botGuid, playerGuid));
 
     trans->Append(SafeFormat(
-        "REPLACE INTO mod_ollama_chat_memory_semantic (bot_guid, player_guid, player_name, facts_text, notes_text, "
+        "REPLACE INTO mod_ollama_chat_memory_semantic (bot_guid, player_guid, player_name, memory_text, facts_text, notes_text, "
         "last_player_at, compacted_turn_count, last_compacted_at) VALUES "
-        "({}, {}, '{}', '{}', '{}', {}, {}, NOW())",
-        botGuid, playerGuid, escName, escFacts, escNotes, lastAtSql, newWm));
+        "({}, {}, '{}', '{}', '{}', '{}', {}, {}, NOW())",
+        botGuid, playerGuid, escName, escSummary, escFacts, escNotes, lastAtSql, newWm));
 
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
@@ -870,23 +893,75 @@ static void DispatchMemoryJob(MemoryJob const& job)
     }).detach();
 }
 
+// Drop cached state for bots whose character no longer exists so the periodic save
+// does not re-insert the rows the DB purge just deleted.
+static void PruneOrphanedMemoryCache()
+{
+    std::vector<uint64_t> cachedBots;
+    {
+        std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
+        for (auto const& [botGuid, _] : g_PairMemory)
+            cachedBots.push_back(botGuid);
+        for (auto const& [botGuid, _] : g_BotConversationHistory)
+            cachedBots.push_back(botGuid);
+    }
+    if (cachedBots.empty())
+        return;
+    std::sort(cachedBots.begin(), cachedBots.end());
+    cachedBots.erase(std::unique(cachedBots.begin(), cachedBots.end()), cachedBots.end());
+
+    std::ostringstream ids;
+    for (size_t i = 0; i < cachedBots.size(); ++i)
+        ids << (i ? "," : "") << cachedBots[i];
+
+    std::unordered_set<uint64_t> live;
+    if (QueryResult result = CharacterDatabase.Query(SafeFormat(
+            "SELECT guid FROM characters WHERE guid IN ({})", ids.str())))
+    {
+        do
+        {
+            live.insert((*result)[0].Get<uint64_t>());
+        } while (result->NextRow());
+    }
+
+    std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
+    for (uint64_t botGuid : cachedBots)
+    {
+        if (live.count(botGuid))
+            continue;
+        g_PairMemory.erase(botGuid);
+        g_BotConversationHistory.erase(botGuid);
+        g_CompactedTurnCount.erase(botGuid);
+        g_TurnTimestamps.erase(botGuid);
+    }
+}
+
 static void PurgeStaleMemoryRows()
 {
-    if (OllamaMemory::EpisodicMaxAgeDays == 0)
-        return;
-
     static time_t lastPurge = 0;
     time_t now = time(nullptr);
     if (lastPurge && difftime(now, lastPurge) < 3600.0)
         return;
     lastPurge = now;
 
-    uint32_t days = OllamaMemory::EpisodicMaxAgeDays;
+    // Random bots recycle their guid on re-randomize; drop memory whose bot character no longer exists.
+    PruneOrphanedMemoryCache();
+
     CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-    trans->Append(SafeFormat(
-        "DELETE FROM mod_ollama_chat_memory_episodic WHERE created_at < DATE_SUB(NOW(), INTERVAL {} DAY)", days));
-    trans->Append(SafeFormat(
-        "DELETE FROM mod_ollama_chat_memory_archive WHERE created_at < DATE_SUB(NOW(), INTERVAL {} DAY)", days));
+
+    if (OllamaMemory::EpisodicMaxAgeDays != 0)
+    {
+        uint32_t days = OllamaMemory::EpisodicMaxAgeDays;
+        trans->Append(SafeFormat(
+            "DELETE FROM mod_ollama_chat_memory_episodic WHERE created_at < DATE_SUB(NOW(), INTERVAL {} DAY)", days));
+        trans->Append(SafeFormat(
+            "DELETE FROM mod_ollama_chat_memory_archive WHERE created_at < DATE_SUB(NOW(), INTERVAL {} DAY)", days));
+    }
+
+    trans->Append("DELETE FROM mod_ollama_chat_memory_semantic WHERE bot_guid NOT IN (SELECT guid FROM characters)");
+    trans->Append("DELETE FROM mod_ollama_chat_memory_episodic WHERE bot_guid NOT IN (SELECT guid FROM characters)");
+    trans->Append("DELETE FROM mod_ollama_chat_memory_archive WHERE bot_guid NOT IN (SELECT guid FROM characters)");
+
     MemoryCommit(trans, "purge stale");
 }
 
@@ -953,8 +1028,15 @@ static void LoadPairFromDB(uint64_t botGuid, uint64_t playerGuid)
         wm = (*result)[5].Get<uint32_t>();
         hasRow = true;
 
-        if (loaded.facts.empty() && !memoryText.empty())
-            loaded.notes = MigrateLegacyMemoryText(memoryText);
+        if (LooksLikeLegacyMemoryText(memoryText))
+        {
+            if (loaded.facts.empty())
+                loaded.notes = MigrateLegacyMemoryText(memoryText);
+        }
+        else
+        {
+            loaded.summary = memoryText;
+        }
     }
 
     if (QueryResult ar = CharacterDatabase.Query(SafeFormat(
@@ -986,6 +1068,8 @@ static void LoadPairFromDB(uint64_t botGuid, uint64_t playerGuid)
         if (hasRow)
         {
             g_CompactedTurnCount[botGuid][playerGuid] = wm;
+            if (pair.summary.empty())
+                pair.summary = loaded.summary;
             if (pair.facts.empty())
                 pair.facts = loaded.facts;
             if (pair.notes.empty())
@@ -1085,8 +1169,15 @@ static void LoadBotMemoryFromDB()
                 PairMemoryState& pair = g_PairMemory[botGuid][playerGuid];
                 pair.facts = facts;
                 pair.notes = notes;
-                if (facts.empty() && !memoryText.empty())
-                    pair.notes = MigrateLegacyMemoryText(memoryText);
+                if (LooksLikeLegacyMemoryText(memoryText))
+                {
+                    if (facts.empty())
+                        pair.notes = MigrateLegacyMemoryText(memoryText);
+                }
+                else
+                {
+                    pair.summary = memoryText;
+                }
                 pair.playerName = (*result)[2].Get<std::string>();
                 if (!(*result)[6].IsNull())
                     pair.lastPlayerAt = static_cast<time_t>((*result)[6].Get<uint64_t>());
@@ -1232,6 +1323,7 @@ bool SaveBotMemoryToDB(bool blocking)
     {
         uint64_t botGuid;
         uint64_t playerGuid;
+        std::string summary;
         std::string facts;
         std::string notes;
         std::string playerName;
@@ -1260,6 +1352,7 @@ bool SaveBotMemoryToDB(bool blocking)
                 semanticRows.push_back({
                     botGuid,
                     playerGuid,
+                    pair.summary,
                     pair.facts,
                     pair.notes,
                     pair.playerName,
@@ -1296,18 +1389,20 @@ bool SaveBotMemoryToDB(bool blocking)
 
     for (auto const& row : semanticRows)
     {
+        std::string escSummary = row.summary;
         std::string escFacts = row.facts;
         std::string escNotes = row.notes;
         std::string escName = row.playerName.empty() ? GetStoredPlayerName(row.botGuid, row.playerGuid) : row.playerName;
+        CharacterDatabase.EscapeString(escSummary);
         CharacterDatabase.EscapeString(escFacts);
         CharacterDatabase.EscapeString(escNotes);
         CharacterDatabase.EscapeString(escName);
         std::string lastAtSql = row.lastPlayerAt ? SafeFormat("FROM_UNIXTIME({})", static_cast<uint64_t>(row.lastPlayerAt)) : "NULL";
         trans->Append(SafeFormat(
-            "REPLACE INTO mod_ollama_chat_memory_semantic (bot_guid, player_guid, player_name, facts_text, notes_text, "
+            "REPLACE INTO mod_ollama_chat_memory_semantic (bot_guid, player_guid, player_name, memory_text, facts_text, notes_text, "
             "last_player_at, compacted_turn_count, last_compacted_at) VALUES "
-            "({}, {}, '{}', '{}', '{}', {}, {}, NOW())",
-            row.botGuid, row.playerGuid, escName, escFacts, escNotes, lastAtSql, row.watermark));
+            "({}, {}, '{}', '{}', '{}', '{}', {}, {}, NOW())",
+            row.botGuid, row.playerGuid, escName, escSummary, escFacts, escNotes, lastAtSql, row.watermark));
     }
 
     for (auto const& row : episodicRows)
@@ -1507,6 +1602,7 @@ std::string GetMemoryPromptAddition(uint64_t botGuid, uint64_t playerGuid, ChatC
     if (!g_EnableMemory)
         return "";
 
+    std::string summary;
     std::string facts;
     std::string notes;
     std::string name;
@@ -1525,6 +1621,7 @@ std::string GetMemoryPromptAddition(uint64_t botGuid, uint64_t playerGuid, ChatC
         else
         {
             pair->cacheLastUsed = time(nullptr);
+            summary = pair->summary;
             facts = pair->facts;
             notes = pair->notes;
             name = pair->playerName;
@@ -1553,6 +1650,7 @@ std::string GetMemoryPromptAddition(uint64_t botGuid, uint64_t playerGuid, ChatC
         return SafeFormat(
             kPromptTemplate,
             fmt::arg("name", name),
+            fmt::arg("summary_line", ""),
             fmt::arg("facts", filtered),
             fmt::arg("notes_line", ""),
             fmt::arg("past_section", ""));
@@ -1566,8 +1664,12 @@ std::string GetMemoryPromptAddition(uint64_t botGuid, uint64_t playerGuid, ChatC
             past = "Past:\n" + past + "\n";
     }
 
-    if (facts.empty() && notes.empty() && past.empty())
+    if (summary.empty() && facts.empty() && notes.empty() && past.empty())
         return "";
+
+    std::string summaryLine;
+    if (!summary.empty())
+        summaryLine = "Summary: " + summary + "\n";
 
     std::string notesLine;
     if (!notes.empty())
@@ -1576,6 +1678,7 @@ std::string GetMemoryPromptAddition(uint64_t botGuid, uint64_t playerGuid, ChatC
     return SafeFormat(
         kPromptTemplate,
         fmt::arg("name", name),
+        fmt::arg("summary_line", summaryLine),
         fmt::arg("facts", facts.empty() ? "-" : facts),
         fmt::arg("notes_line", notesLine),
         fmt::arg("past_section", past));
@@ -1758,6 +1861,7 @@ std::string GetStoredPlayerName(uint64_t botGuid, uint64_t playerGuid)
 
 std::string GetMemoryDebugInfo(uint64_t botGuid, uint64_t playerGuid)
 {
+    std::string summary;
     std::string facts;
     std::string notes;
     uint32_t wm = 0;
@@ -1770,6 +1874,7 @@ std::string GetMemoryDebugInfo(uint64_t botGuid, uint64_t playerGuid)
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
         if (PairMemoryState* pair = GetPairUnlocked(botGuid, playerGuid))
         {
+            summary = pair->summary;
             facts = pair->facts;
             notes = pair->notes;
             archiveRing = static_cast<uint32_t>(pair->archiveRing.size());
@@ -1799,10 +1904,11 @@ std::string GetMemoryDebugInfo(uint64_t botGuid, uint64_t playerGuid)
 
     return fmt::format(
         "watermark={} pending={} archive_ring={} archive_rows={} maint_db={} player_at={} maint_at={}\n"
-        "[FACTS]\n{}\n[NOTES]\n{}",
+        "[SUMMARY]\n{}\n[FACTS]\n{}\n[NOTES]\n{}",
         wm, pending, archiveRing, archiveRows, lastMaintenance,
         lastPlayerAt ? std::to_string(lastPlayerAt) : "never",
         lastMaintenanceAt ? std::to_string(lastMaintenanceAt) : "never",
+        summary.empty() ? "(empty)" : summary,
         facts.empty() ? "(empty)" : facts,
         notes.empty() ? "(empty)" : notes);
 }

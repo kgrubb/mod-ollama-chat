@@ -456,8 +456,9 @@ bool OllamaPromptComposer::IsFactualQuestion(std::string const& message)
     std::string lower = message;
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
     static char const* markers[] = {
-        "where is", "where's", "where are", "how do i", "how to", "which way",
-        "location of", "find ", "coords", "coordinate", "what is the", "who is the"
+        "where is", "where's", "where are", "where can", "how do i", "how to", "how far",
+        "which way", "location of", "find ", "coords", "coordinate",
+        "what is", "what's", "what are", "who is", "who's", "is there"
     };
     for (char const* m : markers)
     {
@@ -639,6 +640,7 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
                 bundle.system.replace(pos, token.size(), input.maintenancePlayerName);
         }
         std::ostringstream u;
+        u << "Summary:\n" << (input.maintenanceSummary.empty() ? "(none)" : input.maintenanceSummary) << "\n\n";
         u << "Facts:\n" << (input.maintenanceFacts.empty() ? "(none)" : input.maintenanceFacts) << "\n\n";
         u << "Notes:\n" << (input.maintenanceNotes.empty() ? "(none)" : input.maintenanceNotes) << "\n\n";
         u << "Turns:\n" << input.maintenanceTurns;

@@ -6,6 +6,8 @@
 #include "mod-ollama-chat_handler.h"
 #include "DatabaseEnv.h"
 #include <random>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace
@@ -101,10 +103,31 @@ std::string GetBotPersonality(Player* bot)
 
 std::string GetPersonalityPromptAddition(const std::string& personality)
 {
+    // Code-only reframe of the immersion-breaking DB templates: keep the flavor as
+    // attitude/word-choice instead of rhyme/riddle/robot-speak. The DB rows are left untouched.
+    static const std::unordered_map<std::string, std::string> kGroundedReframes = {
+        {"BARD", "Upbeat and playful; you like music and pop-culture references, but type like a normal player."},
+        {"POET", "Thoughtful and a bit dramatic, but speak plainly like a normal player."},
+        {"ANCIENT_WISE_ONE", "Calm and seasoned; give grounded advice in plain words, not cryptic riddles."},
+        {"EDGE_LORD", "Moody and blunt with dark humor, but talk like a real player, not theatrical narration."},
+        {"GLITCHED_AI", "Terse and a little odd, but type normal readable sentences, not robotic fragments."},
+        {"NPC_IMPERSONATOR", "Helpful and a bit formal, but chat like a player, not quest-giver dialogue."},
+        {"PIRATE", "Brash and adventurous; nautical slang at most sparingly, mostly talk like a normal player."},
+        {"WANNABE_VILLAIN", "Cocky and scheming for laughs, but talk like a real player, not a cartoon villain."},
+        {"HEROIC_LEADER", "Confident and encouraging; rally people briefly in plain chat, not grand speeches."},
+    };
+
+    static const std::string kRealPlayerConstraint =
+        " Never speak in rhyme, haiku, riddles, or robotic fragments; you are a real person typing quickly.";
+
+    auto reframe = kGroundedReframes.find(personality);
+    if (reframe != kGroundedReframes.end())
+        return reframe->second + kRealPlayerConstraint;
+
     auto it = g_PersonalityPrompts.find(personality);
     if (it != g_PersonalityPrompts.end())
-        return it->second;
-    return g_DefaultPersonalityPrompt;
+        return it->second + kRealPlayerConstraint;
+    return g_DefaultPersonalityPrompt + kRealPlayerConstraint;
 }
 
 bool SetBotPersonality(Player* bot, const std::string& personality)

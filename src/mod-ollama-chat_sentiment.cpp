@@ -8,6 +8,9 @@
 #include <fmt/core.h>
 #include <algorithm>
 #include <mutex>
+#include <sstream>
+#include <vector>
+#include <unordered_set>
 
 float GetBotPlayerSentiment(uint64_t botGuid, uint64_t playerGuid)
 {
@@ -192,6 +195,54 @@ void SaveBotPlayerSentimentsToDB()
     {
         LOG_INFO("server.loading", "[OllamaChat] Saved sentiment data to database");
     }
+}
+
+void PurgeOrphanedSentiments()
+{
+    if (!g_EnableSentimentTracking)
+        return;
+
+    // Throttled to once per hour; random bots recycle their guid on re-randomize and
+    // leave behind sentiment rows whose bot character no longer exists.
+    static time_t lastPurge = 0;
+    time_t now = time(nullptr);
+    if (lastPurge && difftime(now, lastPurge) < 3600.0)
+        return;
+    lastPurge = now;
+
+    std::vector<uint64_t> cachedBots;
+    {
+        std::lock_guard<std::mutex> lock(g_SentimentMutex);
+        cachedBots.reserve(g_BotPlayerSentiments.size());
+        for (auto const& [botGuid, playerMap] : g_BotPlayerSentiments)
+            cachedBots.push_back(botGuid);
+    }
+
+    CharacterDatabase.Execute(
+        "DELETE FROM mod_ollama_chat_bot_player_sentiments WHERE bot_guid NOT IN (SELECT guid FROM characters)");
+
+    if (cachedBots.empty())
+        return;
+
+    std::ostringstream ids;
+    for (size_t i = 0; i < cachedBots.size(); ++i)
+        ids << (i ? "," : "") << cachedBots[i];
+
+    std::unordered_set<uint64_t> live;
+    if (QueryResult result = CharacterDatabase.Query(SafeFormat(
+            "SELECT guid FROM characters WHERE guid IN ({})", ids.str())))
+    {
+        do
+        {
+            live.insert((*result)[0].Get<uint64_t>());
+        } while (result->NextRow());
+    }
+
+    // Drop cached entries for deleted bots so the next save does not re-insert them.
+    std::lock_guard<std::mutex> lock(g_SentimentMutex);
+    for (uint64_t botGuid : cachedBots)
+        if (!live.count(botGuid))
+            g_BotPlayerSentiments.erase(botGuid);
 }
 
 void InitializeSentimentTracking()

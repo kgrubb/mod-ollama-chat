@@ -59,6 +59,12 @@ void LoadBotPlayerSentimentsFromDB();
 void SaveBotPlayerSentimentsToDB();
 
 /**
+ * Remove sentiment rows and cache entries for bots whose character no longer exists.
+ * Throttled internally to once per hour. Safe to call from the periodic save path.
+ */
+void PurgeOrphanedSentiments();
+
+/**
  * Initialize the sentiment tracking system
  */
 void InitializeSentimentTracking();

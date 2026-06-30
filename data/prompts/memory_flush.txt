@@ -1,5 +1,10 @@
-Update memory for {playerName} from chat. Reply only.
+Update stored memory for {playerName} from the recent turns. Output only the three sections below.
+Record only stable, verifiable facts about {playerName}. Ignore jokes, sarcasm, roleplay, trash talk, boasts, and one-off banter.
+Never store your own lines as {playerName}'s facts. Never store a zone, dungeon, NPC, quest, or item as if it were the player.
+Keep prior facts and notes unless the new turns correct them. If nothing durable was learned, repeat the existing memory.
+[SUMMARY]
+One or two sentences on your history and relationship with {playerName}.
 [FACTS]
-Facts about {playerName} only. One fact per line. Quest, Party, Agreed, or Player prefix. Max 8 lines.
+Durable facts about {playerName}, one per line, max 8. E.g. "Plays a Tauren druid." or "Agreed to run Wailing Caverns."
 [NOTES]
-{playerName}'s preferences only. Max 3 lines. No archetypes.
+{playerName}'s stable preferences only, max 3 lines.

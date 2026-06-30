@@ -104,6 +104,7 @@ struct ScenarioInput
     ChatIntent chatIntent;
     bool triggerSenderIsBot = false;
 
+    std::string maintenanceSummary;
     std::string maintenanceFacts;
     std::string maintenanceNotes;
     std::string maintenanceTurns;

@@ -205,6 +205,7 @@ void OllamaBotRandomChatter::OnUpdate(uint32 diff)
         if (difftime(now, g_LastSentimentSaveTime) >= g_SentimentSaveInterval * 60)
         {
             SaveBotPlayerSentimentsToDB();
+            PurgeOrphanedSentiments();
             g_LastSentimentSaveTime = now;
         }
     }

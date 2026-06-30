@@ -2101,7 +2101,7 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
 
                 PromptBundle promptBundle = BuildPlayerChatPrompt(botPtr, senderPtr, msgCopy, sourceLocal, intent);
 
-                if (g_DebugEnabled && g_DebugShowFullPrompt)
+                if (g_DebugShowFullPrompt)
                 {
                     LOG_INFO("server.loading", "[Ollama Chat] Full prompt for bot {} <- {}: system=[{}] user=[{}]",
                         botPtr->GetName(), senderPtr->GetName(), promptBundle.system, promptBundle.user);
@@ -2141,6 +2141,12 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                     LOG_WARN("server.loading", "[Ollama Chat] Sender {} logged off before reply", senderGuid);
                     return;
                 }
+                if (g_DebugShowFullPrompt)
+                {
+                    LOG_INFO("server.loading", "[Ollama Chat] Reply for bot {} -> {} (verified={}): [{}]",
+                        botPtr->GetName(), senderPtr->GetName(), firstPassVerified, response);
+                }
+
                 PlayerbotAI* senderAI = PlayerbotsMgr::instance().GetPlayerbotAI(senderPtr);
                 bool const senderIsBot = senderAI && senderAI->IsBotAI();
                 if (response.empty())
