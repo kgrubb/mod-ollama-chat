@@ -547,6 +547,61 @@ bool TrySendGeneralChat(Player* bot, std::string& response, std::string const& t
     return DeliverGeneralChat(bot, response, channel);
 }
 
+namespace
+{
+void MaybeTrimChatHistoryTable()
+{
+    static time_t lastCleanup = 0;
+    static std::mutex cleanupMutex;
+    time_t const now = time(nullptr);
+    if (lastCleanup && difftime(now, lastCleanup) < 3600.0)
+        return;
+
+    std::unique_lock<std::mutex> lock(cleanupMutex, std::try_to_lock);
+    if (!lock.owns_lock())
+        return;
+    if (lastCleanup && difftime(now, lastCleanup) < 3600.0)
+        return;
+    lastCleanup = now;
+
+    std::string const cleanupQuery = R"SQL(
+        WITH ranked_history AS (
+            SELECT
+                bot_guid,
+                player_guid,
+                timestamp,
+                ROW_NUMBER() OVER (
+                    PARTITION BY bot_guid, player_guid
+                    ORDER BY timestamp DESC
+                ) as rn
+            FROM mod_ollama_chat_history
+        )
+        DELETE FROM mod_ollama_chat_history
+        WHERE (bot_guid, player_guid, timestamp) IN (
+            SELECT bot_guid, player_guid, timestamp
+            FROM ranked_history
+            WHERE rn > {}
+        );
+    )SQL";
+    CharacterDatabase.Execute(SafeFormat(cleanupQuery, g_MaxConversationHistory));
+}
+}
+
+void InsertChatHistoryRow(uint64_t botGuid, uint64_t playerGuid, std::string const& playerMessage,
+    std::string const& botReply)
+{
+    std::string escPlayerMsg = playerMessage;
+    CharacterDatabase.EscapeString(escPlayerMsg);
+    std::string escBotReply = botReply;
+    CharacterDatabase.EscapeString(escBotReply);
+
+    CharacterDatabase.Execute(SafeFormat(
+        "INSERT INTO mod_ollama_chat_history (bot_guid, player_guid, timestamp, player_message, bot_reply) "
+        "VALUES ({}, {}, NOW(), '{}', '{}')",
+        botGuid, playerGuid, escPlayerMsg, escBotReply));
+    MaybeTrimChatHistoryTable();
+}
+
 void AppendBotConversation(uint64_t botGuid, uint64_t playerGuid, const std::string& playerMessage, const std::string& botReply, bool isEvent, ChatChannelSourceLocal channel, bool senderIsBot, bool verified)
 {
     if (senderIsBot)
@@ -555,6 +610,8 @@ void AppendBotConversation(uint64_t botGuid, uint64_t playerGuid, const std::str
     if (g_EnableMemory)
     {
         AppendBotMemoryTurn(botGuid, playerGuid, playerMessage, botReply, isEvent, verified);
+        if (g_EnableChatHistory)
+            InsertChatHistoryRow(botGuid, playerGuid, playerMessage, botReply);
         return;
     }
 
@@ -621,34 +678,7 @@ void SaveBotConversationHistoryToDB()
     if (trans->GetSize() > 0)
         CharacterDatabase.CommitTransaction(trans);
 
-    // The window-function cleanup delete is much heavier than the inserts, so run
-    // it at most once per hour rather than on every save.
-    static time_t lastHistoryCleanup = 0;
-    time_t nowCleanup = time(nullptr);
-    if (lastHistoryCleanup != 0 && difftime(nowCleanup, lastHistoryCleanup) < 3600.0)
-        return;
-    lastHistoryCleanup = nowCleanup;
-
-    std::string cleanupQuery = R"SQL(
-        WITH ranked_history AS (
-            SELECT
-                bot_guid,
-                player_guid,
-                timestamp,
-                ROW_NUMBER() OVER (
-                    PARTITION BY bot_guid, player_guid
-                    ORDER BY timestamp DESC
-                ) as rn
-            FROM mod_ollama_chat_history
-        )
-        DELETE FROM mod_ollama_chat_history
-        WHERE (bot_guid, player_guid, timestamp) IN (
-            SELECT bot_guid, player_guid, timestamp
-            FROM ranked_history
-            WHERE rn > {}
-        );
-    )SQL";
-    CharacterDatabase.Execute(SafeFormat(cleanupQuery, g_MaxConversationHistory));
+    MaybeTrimChatHistoryTable();
 }
 
 // Called when a bot sends a message (random chatter or other bot-initiated messages)

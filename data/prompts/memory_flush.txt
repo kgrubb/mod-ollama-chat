@@ -1,10 +1,11 @@
 Update stored memory for {playerName} from the recent turns. Output only the three sections below.
 Record only stable, verifiable facts about {playerName}. Ignore jokes, sarcasm, roleplay, trash talk, boasts, and one-off banter.
-Never store your own lines as {playerName}'s facts. Never store a zone, dungeon, NPC, quest, or item as if it were the player.
+Never store your own lines ({botName}) as {playerName}'s facts. Never store a zone, dungeon, NPC, quest, or item as if it were the player.
+Do not store bot level excuses or bot dungeon claims as player beliefs.
 Keep prior facts and notes unless the new turns correct them. If nothing durable was learned, repeat the existing memory.
 [SUMMARY]
 One or two sentences on your history and relationship with {playerName}.
 [FACTS]
-Durable facts about {playerName}, one per line, max 8. E.g. "Plays a Tauren druid." or "Agreed to run Wailing Caverns."
+Durable facts about {playerName}, one per line, max 8. E.g. "Plays a Tauren druid." or "Looking for a group for Wailing Caverns."
 [NOTES]
 {playerName}'s stable preferences only, max 3 lines.

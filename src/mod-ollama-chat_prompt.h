@@ -98,6 +98,7 @@ struct ScenarioInput
     std::string actorName;
     RandomIntent randomIntent = RandomIntent::ObserveZone;
     bool factualQuestion = false;
+    std::string dungeonHintSection;
     ChatChannelSourceLocal chatChannel = SRC_UNDEFINED_LOCAL;
     std::string verificationFeedback;
     std::string intentTaskLines;
@@ -109,6 +110,7 @@ struct ScenarioInput
     std::string maintenanceNotes;
     std::string maintenanceTurns;
     std::string maintenancePlayerName;
+    std::string maintenanceBotName;
 };
 
 class OllamaPromptComposer

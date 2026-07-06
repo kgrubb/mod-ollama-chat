@@ -38,7 +38,11 @@ Starting zones, classic and Northrend leveling zones, and major cities.
 Outland zones (TBC, level 58-70).
 
 ### wow_dungeons_raids.json
-Classic, TBC, and Wrath dungeons and raids.
+Classic, TBC, and Wrath dungeons and raids. Optional per-entry fields for acronym lookup (not used in cosine retrieval):
+
+- `acronyms` — short tokens for exact whole-word match in chat (e.g. `rfc`, `dm`)
+- `bot_level_min` / `bot_level_max` — when to offer this entry for ambiguous acronyms (e.g. Deadmines `dm` vs Dire Maul `dm`)
+- `tags` with `level:X-Y` — dungeon level range for eligibility hints
 
 ### wow_quest_pois.json
 Quest locations, zone/subzone landmarks, and dungeon entrances for location-aware RAG ("where is…?" queries).

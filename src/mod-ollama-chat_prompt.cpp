@@ -20,6 +20,7 @@
 #include <fstream>
 #include <sstream>
 #include <filesystem>
+#include <unordered_set>
 
 namespace fs = std::filesystem;
 
@@ -259,6 +260,25 @@ static void AppendSpecIfDistinct(std::ostringstream& out, std::string const& rol
         out << prefix << role << suffix;
 }
 
+static void PinDungeonResults(std::vector<RAGResult>& results, std::vector<DungeonMatch> const& matches)
+{
+    if (matches.empty())
+        return;
+
+    std::unordered_set<std::string> pinned;
+    for (DungeonMatch const& m : matches)
+    {
+        RAGEntry const* entry = m.entry;
+        if (!entry || pinned.count(m.id))
+            continue;
+        pinned.insert(m.id);
+        results.erase(
+            std::remove_if(results.begin(), results.end(),
+                [&](RAGResult const& r) { return r.entry && r.entry->id == m.id; }),
+            results.end());
+        results.insert(results.begin(), { entry, 1.0f });
+    }
+}
 static char const* ChannelLabel(ChatChannelSourceLocal channel)
 {
     switch (channel)
@@ -512,7 +532,7 @@ ChatIntent DetectChatIntent(std::string const& message, std::vector<std::string>
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 
     static char const* kPresence[] = { "anyone in", "anyone here", "anybody around", "anyone at", "anybody here" };
-    static char const* kParty[] = { "party", "group up", "join me", "invite", "lfm", "want to group", "group?" };
+    static char const* kParty[] = { "party", "group up", "join me", "invite", "lfg", "lfm", "want to group", "group?" };
     static char const* kQuestionStart[] = { "who ", "what ", "when ", "where ", "how ", "why " };
 
     intent.presenceQuestion = ContainsMarker(lower, kPresence, sizeof(kPresence) / sizeof(kPresence[0]));
@@ -542,7 +562,7 @@ std::string BuildIntentTaskLines(ChatIntent const& intent)
     if (intent.partyInvite)
         lines += "First few words: clear accept or decline, then optional banter.\n";
     if (intent.botReference && !intent.referencedName.empty())
-        lines += "Acknowledge " + intent.referencedName + "; do not contradict unseen context.\n";
+        lines += "Acknowledge " + intent.referencedName + ". Do not contradict unseen context.\n";
     if (intent.directQuestion)
         lines += "Answer the question directly in the first clause.\n";
     return lines;
@@ -639,6 +659,13 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
                  pos += input.maintenancePlayerName.size())
                 bundle.system.replace(pos, token.size(), input.maintenancePlayerName);
         }
+        if (!input.maintenanceBotName.empty())
+        {
+            std::string const token = "{botName}";
+            for (size_t pos = 0; (pos = bundle.system.find(token, pos)) != std::string::npos;
+                 pos += input.maintenanceBotName.size())
+                bundle.system.replace(pos, token.size(), input.maintenanceBotName);
+        }
         std::ostringstream u;
         u << "Summary:\n" << (input.maintenanceSummary.empty() ? "(none)" : input.maintenanceSummary) << "\n\n";
         u << "Facts:\n" << (input.maintenanceFacts.empty() ? "(none)" : input.maintenanceFacts) << "\n\n";
@@ -698,7 +725,9 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
         AppendSection(user, "Event", ev.str());
     }
 
-    if (input.factualQuestion)
+    if (!input.dungeonHintSection.empty())
+        AppendSection(user, "Hint", input.dungeonHintSection);
+    else if (input.factualQuestion)
         AppendSection(user, "Hint", g_FactualHintSection);
 
     std::ostringstream task;
@@ -826,6 +855,9 @@ void EnrichPromptBundle(PromptBundle& bundle, Player* bot, BotContext const& ctx
         bundle.user += GenerateBotGameStateSnapshot(bot, ctx.groupCtx.memberCount > 0);
 }
 
+static void ApplyRagToInput(BotContext const& ctx, ScenarioInput& input, std::string const& query, bool factual,
+    PromptScenario scenario, std::vector<DungeonMatch> const* pinMatches = nullptr);
+
 PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string const& playerMessage,
     ChatChannelSourceLocal channel, ChatIntent const& intent, std::string const& verificationFeedback)
 {
@@ -842,14 +874,28 @@ PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string cons
 
     ScenarioInput input;
     input.playerMessage = playerMessage;
-    input.factualQuestion = OllamaPromptComposer::IsFactualQuestion(playerMessage);
     input.chatChannel = channel;
-    input.intentTaskLines = BuildIntentTaskLines(intent);
     input.chatIntent = intent;
     input.verificationFeedback = verificationFeedback;
+    input.factualQuestion = OllamaPromptComposer::IsFactualQuestion(playerMessage);
+
+    std::vector<DungeonMatch> resolved;
+    if (g_RAGSystem)
+    {
+        resolved = g_RAGSystem->ResolveAcronyms(playerMessage, ctx.botLevel);
+        if (!resolved.empty())
+            input.dungeonHintSection = g_RAGSystem->FormatEligibilityHint(resolved, ctx.botLevel);
+    }
+    bool const dungeonHit = !resolved.empty();
+    bool const factualRag = input.factualQuestion || dungeonHit || intent.partyInvite;
+
+    input.intentTaskLines = BuildIntentTaskLines(intent);
 
     uint64_t botGuid = bot->GetGUID().GetRawValue();
-    uint64_t playerGuid = player->GetGUID().GetRawValue();
+    uint64_t playerGuid = player ? player->GetGUID().GetRawValue() : 0;
+
+    if (g_EnableSentimentTracking && player)
+        input.sentimentSection = GetSentimentPromptAddition(bot, player);
 
     bool senderIsBot = false;
     if (player)
@@ -863,10 +909,7 @@ PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string cons
     if (!skipContext)
         input.chatHistorySection = GetBotHistorySection(botGuid, playerGuid, playerMessage);
 
-    if (g_EnableSentimentTracking && player)
-        input.sentimentSection = GetSentimentPromptAddition(bot, player);
-
-    if (g_EnableMemory && !skipContext)
+    if (g_EnableMemory && !skipContext && player)
         input.memorySection = GetMemoryPromptAddition(botGuid, playerGuid, channel, playerMessage, player->GetName());
 
     if (channel == SRC_GENERAL_LOCAL)
@@ -875,16 +918,10 @@ PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string cons
     if (g_EnableRAG && g_RAGSystem && !OllamaPromptComposer::IsSocialPresenceQuestion(playerMessage))
     {
         std::string ragQuery = OllamaPromptComposer::BuildRagQuery(playerMessage, ctx.botZone, ctx.botArea);
-        auto results = g_RAGSystem->RetrieveRelevantInfo(
-            ragQuery, g_RAGMaxRetrievedItems, g_RAGSimilarityThreshold, input.factualQuestion);
-        FilterRagByLevel(results, ctx.botLevel);
-        FilterRagByClass(results, ctx.botClass, ctx.playerClass);
-        if (channel == SRC_GENERAL_LOCAL && !input.factualQuestion)
-            FilterRagForCasualChatter(results);
-        KnowledgeLevel level = OllamaPromptComposer::RollKnowledgeLevel(ctx, results);
-        std::string bullets = g_RAGSystem->GetFormattedRAGInfo(results);
-        input.knowledgeSection = OllamaPromptComposer::BuildKnowledgeSection(level, bullets);
-        input.knowledgeLevel = level;
+        for (DungeonMatch const& m : resolved)
+            ragQuery += " " + m.fullName;
+        ApplyRagToInput(ctx, input, ragQuery, factualRag, PromptScenario::PlayerChat,
+            dungeonHit ? &resolved : nullptr);
     }
 
     input.contextSection = BuildBotPromptContext(bot);
@@ -896,7 +933,7 @@ PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string cons
 }
 
 static void ApplyRagToInput(BotContext const& ctx, ScenarioInput& input, std::string const& query, bool factual,
-    PromptScenario scenario)
+    PromptScenario scenario, std::vector<DungeonMatch> const* pinMatches)
 {
     if (!g_EnableRAG || !g_RAGSystem)
         return;
@@ -908,8 +945,10 @@ static void ApplyRagToInput(BotContext const& ctx, ScenarioInput& input, std::st
         query, g_RAGMaxRetrievedItems, g_RAGSimilarityThreshold, factual);
     FilterRagByLevel(results, ctx.botLevel);
     FilterRagByClass(results, ctx.botClass, ctx.playerClass);
-    if (input.chatChannel == SRC_GENERAL_LOCAL)
+    if (input.chatChannel == SRC_GENERAL_LOCAL && !factual)
         FilterRagForCasualChatter(results);
+    if (pinMatches)
+        PinDungeonResults(results, *pinMatches);
 
     if (scenario == PromptScenario::EventReaction && input.chatChannel == SRC_GENERAL_LOCAL)
     {
@@ -918,9 +957,10 @@ static void ApplyRagToInput(BotContext const& ctx, ScenarioInput& input, std::st
             results.resize(1);
     }
 
-    KnowledgeLevel level = OllamaPromptComposer::RollKnowledgeLevel(ctx, results);
-    std::string bullets = g_RAGSystem->GetFormattedRAGInfo(results);
-    input.knowledgeSection = OllamaPromptComposer::BuildKnowledgeSection(level, bullets);
+    KnowledgeLevel level = pinMatches && !pinMatches->empty() ? KnowledgeLevel::Full
+        : OllamaPromptComposer::RollKnowledgeLevel(ctx, results);
+    input.knowledgeSection = OllamaPromptComposer::BuildKnowledgeSection(
+        level, g_RAGSystem->GetFormattedRAGInfo(results));
     input.knowledgeLevel = level;
 }
 

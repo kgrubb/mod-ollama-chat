@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <nlohmann/json.hpp>
 
 struct RAGEntry {
@@ -12,11 +13,23 @@ struct RAGEntry {
     std::string content;
     std::vector<std::string> keywords;
     std::vector<std::string> tags;
+    std::vector<std::string> acronyms;
+    uint32_t botLevelMin = 0;
+    uint32_t botLevelMax = 999;
 };
 
 struct RAGResult {
     const RAGEntry* entry;
     float similarity;
+};
+
+struct DungeonMatch
+{
+    std::string id;
+    std::string fullName;
+    uint32_t levelMin = 0;
+    uint32_t levelMax = 0;
+    RAGEntry const* entry = nullptr;
 };
 
 class OllamaRAGSystem {
@@ -32,6 +45,10 @@ public:
     void Reload();
 
     std::string GetFormattedRAGInfo(const std::vector<RAGResult>& results);
+    RAGEntry const* GetEntryById(std::string const& id) const;
+
+    std::vector<DungeonMatch> ResolveAcronyms(std::string const& message, uint32_t botLevel) const;
+    std::string FormatEligibilityHint(std::vector<DungeonMatch> const& matches, uint32_t botLevel) const;
 
 private:
     struct EntryIndex {
@@ -41,9 +58,29 @@ private:
         bool mechanicsTagPenalty = false;
     };
 
+    struct AcronymEntry
+    {
+        std::string id;
+        std::string fullName;
+        uint32_t levelMin = 0;
+        uint32_t levelMax = 0;
+        uint32_t botLevelMin = 0;
+        uint32_t botLevelMax = 999;
+        RAGEntry const* source = nullptr;
+        std::vector<std::string> acronyms;
+    };
+
+    struct PhraseAcronym
+    {
+        std::string phrase;
+        size_t entryIndex = 0;
+    };
+
     bool LoadRAGDataFromDirectory(const std::string& directoryPath);
     bool LoadRAGDataFromFile(const std::string& filePath);
     void BuildEntryIndex();
+    void BuildAcronymIndex();
+    size_t PickBestAcronymEntry(std::vector<size_t> const& indices, uint32_t botLevel) const;
 
     float CalculateSimilarity(
         std::unordered_map<std::string, float> const& queryTf,
@@ -58,6 +95,12 @@ private:
 private:
     std::vector<RAGEntry> m_ragEntries;
     std::vector<EntryIndex> m_entryIndex;
+    std::unordered_map<std::string, size_t> m_entryIdIndex;
+    std::unordered_map<std::string, std::vector<size_t>> m_termToEntries;
+    std::vector<AcronymEntry> m_acronymEntries;
+    std::unordered_map<std::string, std::vector<size_t>> m_wordAcronyms;
+    std::vector<PhraseAcronym> m_phraseAcronyms;
+    std::unordered_set<std::string> m_ambiguousAcronyms;
     bool m_initialized;
 };
 

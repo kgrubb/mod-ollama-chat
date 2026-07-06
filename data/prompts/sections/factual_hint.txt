@@ -1,1 +1,1 @@
-The player asked a factual question. Answer directly using Knowledge if you have it; otherwise admit uncertainty.
+The player asked a factual question. Answer directly using Knowledge if you have it. Otherwise admit uncertainty.

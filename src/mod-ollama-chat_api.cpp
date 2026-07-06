@@ -12,6 +12,15 @@
 #include <cctype>
 #include <vector>
 
+namespace
+{
+OllamaHttpClient& SharedHttpClient()
+{
+    static OllamaHttpClient client;
+    return client;
+}
+}
+
 static std::string StripWrappingQuotes(std::string const& response)
 {
     if (response.size() >= 2 && response.front() == '"' && response.back() == '"')
@@ -182,7 +191,7 @@ static bool ParseOpenAIResponse(std::string const& responseBuffer, std::string& 
 
 static std::string QueryOllamaAPIInternal(std::string const& systemText, std::string const& userPrompt, uint32_t maxTokensOverride = 0)
 {
-    static OllamaHttpClient httpClient;
+    OllamaHttpClient& httpClient = SharedHttpClient();
 
     std::string url   = g_OllamaUrl;
     std::string model = g_OllamaModel;
@@ -486,9 +495,8 @@ bool ValidateOllamaModel()
     if (g_OllamaModel.empty() || g_OllamaUrl.empty())
         return false;
 
-    static OllamaHttpClient httpClient;
     std::string const modelsUrl = DeriveModelsUrl(g_OllamaUrl);
-    std::string const body = httpClient.Get(modelsUrl, g_OllamaApiKey);
+    std::string const body = SharedHttpClient().Get(modelsUrl, g_OllamaApiKey);
     if (body.empty())
     {
         LOG_WARN("server.loading", "[Ollama Chat] Model validation skipped — {} unreachable", modelsUrl);

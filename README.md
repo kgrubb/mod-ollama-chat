@@ -212,9 +212,9 @@ Reloads the module's configuration from `mod-ollama-chat.conf` without restartin
 Optional long-term bot-player memory. Set `OllamaChat.EnableMemory = 1`, then `.ollama reload`.
 - **Security Level:** SEC_ADMINISTRATOR
 - **Usage:**
-  - `.ollama memory view [bot] [player]` — inspect memory
-  - `.ollama memory reset [bot] [player]` — clear RAM and DB
-  - `.ollama memory compact <bot> <player>` — queue maintenance
+  - `.ollama memory view [bot] [player]` - inspect memory
+  - `.ollama memory reset [bot] [player]` - clear RAM and DB
+  - `.ollama memory compact <bot> <player>` - queue maintenance
 - Bot and player accept online names or numeric GUIDs. See `conf/mod_ollama_chat.conf.dist` and `src/mod-ollama-chat_memory.h` for other settings.
 - **Console Equivalent:** `ollama memory view|reset|compact ...`
 

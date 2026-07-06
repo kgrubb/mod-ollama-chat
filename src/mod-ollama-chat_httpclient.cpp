@@ -4,6 +4,7 @@
 
 #include "Log.h"
 #include <chrono>
+#include <memory>
 #include <regex>
 #include <thread>
 
@@ -23,6 +24,17 @@ constexpr int kReadTimeoutSec = 120;
 constexpr int kMaxPostRetries = 3;
 constexpr int kMaxGetRetries = 2;
 constexpr int kRetryDelayMs = 1000;
+
+struct ThreadClients
+{
+    std::string endpointKey;
+    std::unique_ptr<httplib::Client> http;
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+    std::unique_ptr<httplib::SSLClient> https;
+#endif
+};
+
+thread_local ThreadClients tl;
 
 ParsedUrl ParseUrl(std::string const& url)
 {
@@ -56,6 +68,63 @@ ParsedUrl ParseUrl(std::string const& url)
     return parts;
 }
 
+std::string EndpointKey(ParsedUrl const& parts)
+{
+    return parts.protocol + "://" + parts.host + ":" + std::to_string(parts.port);
+}
+
+void InvalidateThreadClients()
+{
+    tl.endpointKey.clear();
+    tl.http.reset();
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+    tl.https.reset();
+#endif
+}
+
+void EnsureThreadEndpoint(ParsedUrl const& parts)
+{
+    std::string const key = EndpointKey(parts);
+    if (tl.endpointKey == key)
+        return;
+    InvalidateThreadClients();
+    tl.endpointKey = key;
+}
+
+template<typename ClientT>
+void ConfigureClient(ClientT& client, int connectTimeout, int readTimeout)
+{
+    client.set_connection_timeout(connectTimeout);
+    client.set_read_timeout(readTimeout);
+    client.set_write_timeout(readTimeout);
+    client.set_keep_alive(true);
+}
+
+httplib::Client& GetHttpClient(ParsedUrl const& parts, int connectTimeout, int readTimeout)
+{
+    EnsureThreadEndpoint(parts);
+    if (!tl.http)
+    {
+        tl.http = std::make_unique<httplib::Client>(parts.host, parts.port);
+        ConfigureClient(*tl.http, connectTimeout, readTimeout);
+    }
+    return *tl.http;
+}
+
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+httplib::SSLClient& GetHttpsClient(ParsedUrl const& parts, int connectTimeout, int readTimeout)
+{
+    EnsureThreadEndpoint(parts);
+    if (!tl.https)
+    {
+        tl.https = std::make_unique<httplib::SSLClient>(parts.host, parts.port);
+        tl.https->enable_server_certificate_verification(false);
+        ConfigureClient(*tl.https, connectTimeout, readTimeout);
+    }
+    return *tl.https;
+}
+#endif
+
 httplib::Headers BuildHeaders(std::string const& bearerToken, std::string const& host)
 {
     httplib::Headers headers = {
@@ -79,12 +148,7 @@ httplib::Result DispatchRequest(ParsedUrl const& parts, int connectTimeout, int 
     if (parts.protocol == "https")
     {
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-        httplib::SSLClient client(parts.host, parts.port);
-        client.enable_server_certificate_verification(false);
-        client.set_connection_timeout(connectTimeout);
-        client.set_read_timeout(readTimeout);
-        client.set_write_timeout(readTimeout);
-        return fn(client);
+        return fn(GetHttpsClient(parts, connectTimeout, readTimeout));
 #else
         (void)parts;
         (void)connectTimeout;
@@ -94,11 +158,7 @@ httplib::Result DispatchRequest(ParsedUrl const& parts, int connectTimeout, int 
 #endif
     }
 
-    httplib::Client client(parts.host, parts.port);
-    client.set_connection_timeout(connectTimeout);
-    client.set_read_timeout(readTimeout);
-    client.set_write_timeout(readTimeout);
-    return fn(client);
+    return fn(GetHttpClient(parts, connectTimeout, readTimeout));
 }
 
 bool SslAvailable(ParsedUrl const& parts)
@@ -196,9 +256,11 @@ std::string OllamaHttpClient::Post(std::string const& url, std::string const& js
                 MarkAvailable(true);
                 return result.body;
             }
+            InvalidateThreadClients();
         }
         catch (std::exception const& e)
         {
+            InvalidateThreadClients();
             if (attempt == kMaxPostRetries - 1)
                 LOG_ERROR("server.loading", "[Ollama Chat] HTTP client exception: {}", e.what());
         }
@@ -232,9 +294,11 @@ std::string OllamaHttpClient::Get(std::string const& url, std::string const& bea
             HttpAttempt const result = GetOnce(parts, bearerToken);
             if (result.status == PostStatus::Success || result.status == PostStatus::Fail)
                 return result.body;
+            InvalidateThreadClients();
         }
         catch (std::exception const& e)
         {
+            InvalidateThreadClients();
             if (attempt == kMaxGetRetries - 1)
                 LOG_ERROR("server.loading", "[Ollama Chat] HTTP GET exception: {}", e.what());
         }
@@ -246,4 +310,5 @@ std::string OllamaHttpClient::Get(std::string const& url, std::string const& bea
 void OllamaHttpClient::SetTimeout(int seconds)
 {
     m_readTimeout = seconds;
+    InvalidateThreadClients();
 }

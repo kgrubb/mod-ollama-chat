@@ -269,8 +269,8 @@ static bool ParseMaintenanceResponse(std::string const& raw, std::string& summar
 static void AppendDialogueTurn(std::ostringstream& out, std::string const& playerName,
     std::string const& botName, ConversationTurn const& turn, bool tagUnverified)
 {
-    out << playerName << ": " << turn.playerMessage << "\n";
-    out << botName << ": " << turn.botReply;
+    out << "[PLAYER] " << playerName << ": " << turn.playerMessage << "\n";
+    out << "[BOT] " << botName << ": " << turn.botReply;
     if (tagUnverified && !turn.verified)
         out << " (unverified)";
     out << "\n";
@@ -304,6 +304,48 @@ static std::vector<std::string> SplitFactLines(std::string const& facts)
             lines.push_back(std::move(line));
     }
     return lines;
+}
+
+static float TokenOverlapRatio(std::string const& a, std::string const& b)
+{
+    auto ta = Tokenize(a);
+    auto tb = Tokenize(b);
+    if (ta.empty() || tb.empty())
+        return 0.0f;
+    std::unordered_set<std::string> setA(ta.begin(), ta.end());
+    uint32_t overlap = 0;
+    for (std::string const& t : tb)
+    {
+        if (setA.count(t))
+            ++overlap;
+    }
+    return static_cast<float>(overlap) / static_cast<float>(tb.size());
+}
+
+static bool ShouldDropFactLine(std::string const& line, std::vector<ConversationTurn> const& turns)
+{
+    for (ConversationTurn const& turn : turns)
+    {
+        if (TokenOverlapRatio(line, turn.botReply) > 0.6f)
+            return true;
+    }
+    return false;
+}
+
+static std::string SanitizePlayerFacts(std::string const& facts, std::vector<ConversationTurn> const& turns)
+{
+    std::ostringstream out;
+    bool first = true;
+    for (std::string const& line : SplitFactLines(facts))
+    {
+        if (ShouldDropFactLine(line, turns))
+            continue;
+        if (!first)
+            out << "\n";
+        first = false;
+        out << line;
+    }
+    return out.str();
 }
 
 static std::string ArchiveDoc(ArchiveTurn const& turn)
@@ -712,6 +754,7 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
     input.maintenanceNotes = existingNotes;
     input.maintenanceTurns = turnsBlock.str();
     input.maintenancePlayerName = playerName;
+    input.maintenanceBotName = botName;
 
     PromptBundle bundle = OllamaPromptComposer::Build(PromptScenario::MemoryMaintenance, {}, input);
     bundle.maxTokens = OllamaMemory::MemoryQueryMaxTokens;
@@ -733,7 +776,7 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
             if (!llmSummary.empty())
                 newSummary = llmSummary;
             if (!llmFacts.empty())
-                newFacts = llmFacts;
+                newFacts = SanitizePlayerFacts(llmFacts, pendingTurns);
             if (!llmNotes.empty())
                 newNotes = llmNotes;
         }

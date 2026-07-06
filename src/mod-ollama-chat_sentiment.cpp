@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <mutex>
 #include <sstream>
+#include <thread>
 #include <vector>
 #include <unordered_set>
 
@@ -51,76 +52,60 @@ void SetBotPlayerSentiment(uint64_t botGuid, uint64_t playerGuid, float sentimen
     }
 }
 
-float AnalyzeMessageSentiment(const std::string& message)
+static float ParseSentimentAdjustment(std::string const& response)
 {
-    if (!g_EnableSentimentTracking || message.empty())
-        return 0.0f;
-
-    std::string prompt = SafeFormat(g_SentimentAnalysisPrompt, fmt::arg("message", message));
-
-    if (g_DebugEnabled)
-        LOG_INFO("server.loading", "[OllamaChat] Sentiment analysis prompt: {}", prompt);
-
-    auto future = SubmitQuery(prompt);
-    std::string response = future.valid() ? future.get() : "";
-    
     if (response.empty())
-    {
-        if (g_DebugEnabled)
-            LOG_INFO("server.loading", "[OllamaChat] Empty sentiment analysis response");
         return 0.0f;
-    }
-    
-    // Convert response to uppercase for comparison
-    std::string upperResponse = response;
-    std::transform(upperResponse.begin(), upperResponse.end(), upperResponse.begin(), ::toupper);
-    
-    // Parse the sentiment response
-    float adjustment = 0.0f;
-    if (upperResponse.find("POSITIVE") != std::string::npos)
-    {
-        adjustment = g_SentimentAdjustmentStrength;
-    }
-    else if (upperResponse.find("NEGATIVE") != std::string::npos)
-    {
-        adjustment = -g_SentimentAdjustmentStrength;
-    }
-    // NEUTRAL or unrecognized = 0.0f (no change)
-    
+
+    std::string upper = response;
+    std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
+    if (upper.find("POSITIVE") != std::string::npos)
+        return g_SentimentAdjustmentStrength;
+    if (upper.find("NEGATIVE") != std::string::npos)
+        return -g_SentimentAdjustmentStrength;
+    return 0.0f;
+}
+
+static void AdjustBotPlayerSentiment(uint64_t botGuid, uint64_t playerGuid, float adjustment)
+{
+    if (!g_EnableSentimentTracking || adjustment == 0.0f)
+        return;
+
+    std::lock_guard<std::mutex> lock(g_SentimentMutex);
+    auto& pairMap = g_BotPlayerSentiments[botGuid];
+    auto it = pairMap.find(playerGuid);
+    float const prev = it != pairMap.end() ? it->second : g_SentimentDefaultValue;
+    float const next = std::max(0.0f, std::min(1.0f, prev + adjustment));
+    pairMap[playerGuid] = next;
+
     if (g_DebugEnabled)
-    {
-        LOG_INFO("server.loading", "[OllamaChat] Sentiment analysis: '{}' -> adjustment: {:.2f}", 
-                 response, adjustment);
-    }
-    
-    return adjustment;
+        LOG_INFO("server.loading", "[OllamaChat] Sentiment {} -> {} ({:+.2f}) bot {} player {}",
+            prev, next, adjustment, botGuid, playerGuid);
 }
 
 void UpdateBotPlayerSentiment(Player* bot, Player* player, const std::string& message)
 {
-    if (!g_EnableSentimentTracking || !bot || !player)
+    if (!g_EnableSentimentTracking || !bot || !player || message.empty())
         return;
 
-    uint64_t botGuid = bot->GetGUID().GetRawValue();
-    uint64_t playerGuid = player->GetGUID().GetRawValue();
-    
-    // Get current sentiment
-    float currentSentiment = GetBotPlayerSentiment(botGuid, playerGuid);
-    
-    // Analyze the message sentiment
-    float adjustment = AnalyzeMessageSentiment(message);
-    
-    // Apply the adjustment
-    float newSentiment = currentSentiment + adjustment;
-    
-    // Set the updated sentiment
-    SetBotPlayerSentiment(botGuid, playerGuid, newSentiment);
-    
-    if (g_DebugEnabled && adjustment != 0.0f)
-    {
-        LOG_INFO("server.loading", "[OllamaChat] Updated sentiment: {} -> {} ({:+.2f}) for bot {} and player {}", 
-                 currentSentiment, newSentiment, adjustment, bot->GetName(), player->GetName());
-    }
+    uint64_t const botGuid = bot->GetGUID().GetRawValue();
+    uint64_t const playerGuid = player->GetGUID().GetRawValue();
+
+    std::string prompt = SafeFormat(g_SentimentAnalysisPrompt, fmt::arg("message", message));
+    auto future = SubmitQuery(prompt);
+    if (!future.valid())
+        return;
+
+    std::thread([botGuid, playerGuid, future = std::move(future)]() mutable {
+        try
+        {
+            AdjustBotPlayerSentiment(botGuid, playerGuid,
+                ParseSentimentAdjustment(future.valid() ? future.get() : ""));
+        }
+        catch (...)
+        {
+        }
+    }).detach();
 }
 
 std::string GetSentimentPromptAddition(Player* bot, Player* player)
@@ -131,7 +116,10 @@ std::string GetSentimentPromptAddition(Player* bot, Player* player)
     float sentimentValue = GetBotPlayerSentiment(bot->GetGUID().GetRawValue(), player->GetGUID().GetRawValue());
 
     return fmt::format("Relationship with {}: {:.2f} (0=hostile, 0.5=neutral, 1=friendly)",
-        player->GetName(), sentimentValue);
+        player->GetName(), sentimentValue) +
+        (sentimentValue < 0.4f
+            ? "\nRelationship is strained. You may be blunt or dismissive, but not insulting or escalating."
+            : "");
 }
 
 void LoadBotPlayerSentimentsFromDB()
