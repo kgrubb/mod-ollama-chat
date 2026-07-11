@@ -25,6 +25,7 @@
 #include <chrono>
 #include <ctime>
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
 #include "DatabaseEnv.h"
 #include "mod-ollama-chat_handler.h"
@@ -428,8 +429,82 @@ namespace
 {
 constexpr size_t kGeneralTranscriptCap = 12;
 constexpr uint32_t kBotGeneralHumanActivityMinutes = 5;
-constexpr uint32_t kGeneralMaxBotsPerHumanMessage = 2;
+constexpr uint32_t kGeneralMaxBotsPerHumanMessage = 1;
 constexpr uint32_t kReplyVerificationMaxRetries = 1;
+
+bool SameGroupPlayers(Player* a, Player* b)
+{
+    return a && b && a->GetGroup() && b->GetGroup() && a->GetGroup() == b->GetGroup();
+}
+
+std::string ToLowerName(std::string name)
+{
+    for (char& c : name)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return name;
+}
+
+bool MessageAddressesOtherPlayer(std::string const& message, Player* speaker,
+    std::vector<Player*> const& candidateBots)
+{
+    if (!speaker || message.empty())
+        return false;
+
+    // Ordered tokens: only early positions count as addressee ("Name ..." / "yo Name ...").
+    std::vector<std::string> tokens;
+    std::string token;
+    for (unsigned char c : message)
+    {
+        if (std::isalnum(c))
+            token += static_cast<char>(std::tolower(c));
+        else if (!token.empty())
+        {
+            tokens.push_back(std::move(token));
+            token.clear();
+        }
+    }
+    if (!token.empty())
+        tokens.push_back(std::move(token));
+    if (tokens.empty())
+        return false;
+
+    std::unordered_set<std::string> wordSet(tokens.begin(), tokens.end());
+
+    // Candidate bot mention (any position) wins - keep "that bot only" routing.
+    std::unordered_set<uint64_t> candidateGuids;
+    candidateGuids.reserve(candidateBots.size());
+    for (Player* bot : candidateBots)
+    {
+        if (!bot)
+            continue;
+        candidateGuids.insert(bot->GetGUID().GetRawValue());
+        if (wordSet.count(ToLowerName(bot->GetName())))
+            return false;
+    }
+
+    size_t const limit = std::min<size_t>(tokens.size(), 2);
+    std::unordered_set<std::string> earlyTokens(tokens.begin(), tokens.begin() + static_cast<std::ptrdiff_t>(limit));
+
+    // One pass over online players; only names matching early tokens matter.
+    for (auto const& itr : ObjectAccessor::GetPlayers())
+    {
+        Player* other = itr.second;
+        if (!other || !other->IsInWorld() || other == speaker)
+            continue;
+        if (candidateGuids.count(other->GetGUID().GetRawValue()))
+            continue;
+        if (PlayerbotsMgr::instance().GetPlayerbotAI(other))
+            continue;
+
+        std::string nameLower = ToLowerName(other->GetName());
+        if (nameLower.empty() || !earlyTokens.count(nameLower))
+            continue;
+        if (SameGroupPlayers(speaker, other))
+            continue;
+        return true;
+    }
+    return false;
+}
 
 struct GeneralTranscriptLine
 {
@@ -596,7 +671,7 @@ void InsertChatHistoryRow(uint64_t botGuid, uint64_t playerGuid, std::string con
     CharacterDatabase.EscapeString(escBotReply);
 
     CharacterDatabase.Execute(SafeFormat(
-        "INSERT INTO mod_ollama_chat_history (bot_guid, player_guid, timestamp, player_message, bot_reply) "
+        "INSERT IGNORE INTO mod_ollama_chat_history (bot_guid, player_guid, timestamp, player_message, bot_reply) "
         "VALUES ({}, {}, NOW(), '{}', '{}')",
         botGuid, playerGuid, escPlayerMsg, escBotReply));
     MaybeTrimChatHistoryTable();
@@ -618,7 +693,7 @@ void AppendBotConversation(uint64_t botGuid, uint64_t playerGuid, const std::str
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
         auto& playerHistory = g_BotConversationHistory[botGuid][playerGuid];
-        playerHistory.push_back({ playerMessage, botReply, verified });
+        playerHistory.push_back({ playerMessage, botReply, verified, isEvent });
 
         while (playerHistory.size() > g_MaxConversationHistory)
             playerHistory.pop_front();
@@ -863,7 +938,11 @@ std::string GetBotHistoryPrompt(uint64_t botGuid, uint64_t playerGuid, std::stri
             startIdx = std::min(static_cast<size_t>(wm), playerIt->second.size());
         }
         for (size_t i = startIdx; i < playerIt->second.size(); ++i)
+        {
+            if (playerIt->second[i].isEvent)
+                continue;
             historyCopy.push_back(playerIt->second[i]);
+        }
     }
 
     Player* player = ObjectAccessor::FindPlayer(ObjectGuid(playerGuid));
@@ -1864,6 +1943,14 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
         LOG_INFO("server.loading", "[Ollama Chat] {} bots not eligible for {} (distance/guild/party checks failed)", 
                 notEligibleCount, ChatChannelSourceLocalStr[sourceLocal]);
     }
+
+    if (!senderIsBot && sourceLocal != SRC_WHISPER_LOCAL &&
+        MessageAddressesOtherPlayer(msg, player, candidateBots))
+    {
+        if (g_DebugEnabled)
+            LOG_INFO("server.loading", "[Ollama Chat] Skipping reply - message addresses another player");
+        return;
+    }
     
     // Determine reply chance based on channel type
     uint32_t chance;
@@ -2009,21 +2096,7 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
                 }
             }
             if (nearest)
-            {
                 finalCandidates.push_back(nearest);
-                if (candidateBots.size() > 1)
-                {
-                    for (uint32_t i = 0; i < 8; ++i)
-                    {
-                        Player* other = candidateBots[urand(0, static_cast<uint32_t>(candidateBots.size()) - 1)];
-                        if (other != nearest && !(g_DisableRepliesInCombat && other->IsInCombat()))
-                        {
-                            finalCandidates.push_back(other);
-                            break;
-                        }
-                    }
-                }
-            }
         }
         else
         {
@@ -2071,11 +2144,13 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
         return;
     }
     
-    uint32_t maxPick = g_MaxBotsToPick;
+    uint32_t maxPick = 1;
     if (senderIsBot && sourceLocal == SRC_GENERAL_LOCAL)
         maxPick = 1;
-    if (!senderIsBot && sourceLocal == SRC_GENERAL_LOCAL)
+    else if (!senderIsBot && sourceLocal == SRC_GENERAL_LOCAL)
         maxPick = kGeneralMaxBotsPerHumanMessage;
+    else if (g_MaxBotsToPick > 0)
+        maxPick = 1;
 
     if (finalCandidates.size() > maxPick)
     {

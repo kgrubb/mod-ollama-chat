@@ -484,6 +484,12 @@ void LoadOllamaChatConfig()
     }
 
     g_EventChatterPromptTemplate     = sConfigMgr->GetOption<std::string>("OllamaChat.EventChatterPromptTemplate", "");
+    if (!g_EventChatterPromptTemplate.empty())
+    {
+        LOG_WARN("server.loading",
+            "[OllamaChat] OllamaChat.EventChatterPromptTemplate is ignored. "
+            "Event replies use typed prompts under data/prompts/events/.");
+    }
 
     g_ChatPromptTemplate              = sConfigMgr->GetOption<std::string>("OllamaChat.ChatPromptTemplate", "");
     

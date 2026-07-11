@@ -95,6 +95,7 @@ struct ScenarioInput
     std::string recentGeneralSection;
     std::string eventType;
     std::string eventDetail;
+    std::string eventTask;
     std::string actorName;
     RandomIntent randomIntent = RandomIntent::ObserveZone;
     bool factualQuestion = false;
@@ -134,15 +135,16 @@ std::string GetBotCompactNearbySection(Player* bot);
 ChatIntent DetectChatIntent(std::string const& message, std::vector<std::string> const& referenceNames);
 std::string BuildIntentTaskLines(ChatIntent const& intent);
 void EnrichPromptBundle(PromptBundle& bundle, Player* bot, BotContext const& ctx,
-    Player* playerOrNull, ChatChannelSourceLocal channel, bool randomAmbient = false);
+    Player* playerOrNull, ChatChannelSourceLocal channel, bool randomAmbient = false,
+    bool forceSnapshot = false);
 
 PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string const& playerMessage,
     ChatChannelSourceLocal channel = SRC_UNDEFINED_LOCAL, ChatIntent const& intent = {},
     std::string const& verificationFeedback = {});
 PromptBundle BuildRandomChatterPrompt(Player* bot, std::string const& environmentInfo, RandomIntent intent,
     ChatChannelSourceLocal channel = SRC_UNDEFINED_LOCAL);
-PromptBundle BuildEventReactionPrompt(Player* bot, Player* actorPlayer, std::string const& eventType,
-    std::string const& eventDetail, std::string const& actorName,
-    ChatChannelSourceLocal channel = SRC_UNDEFINED_LOCAL);
+PromptBundle BuildEventReactionPrompt(Player* bot, Player* actorPlayer,
+    std::string const& eventType, std::string const& eventDetail, std::string const& eventTask,
+    std::string const& actorName, ChatChannelSourceLocal channel = SRC_UNDEFINED_LOCAL);
 
 #endif

@@ -91,7 +91,7 @@ extern uint32_t    g_ConversationHistorySaveInterval;
 extern std::string g_RandomChatterPromptTemplate;
 extern std::vector<std::string> g_RandomChatterPromptVariations;
 extern std::vector<std::string> g_RandomChatterQuestionVariations;
-extern std::string g_EventChatterPromptTemplate;
+extern std::string g_EventChatterPromptTemplate; // loaded for compat; ignored (typed data/prompts/events/)
 extern std::string g_ChatPromptTemplate;
 extern std::string g_ChatExtraInfoTemplate;
 
@@ -126,6 +126,7 @@ struct ConversationTurn
     std::string playerMessage;
     std::string botReply;
     bool verified = true;
+    bool isEvent = false;
 };
 
 extern std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::deque<ConversationTurn>>> g_BotConversationHistory;

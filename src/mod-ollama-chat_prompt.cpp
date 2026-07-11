@@ -5,6 +5,7 @@
 #include "mod-ollama-chat_sentiment.h"
 #include "mod-ollama-chat_rag.h"
 #include "mod-ollama-chat_handler.h"
+#include "mod-ollama-chat_events.h"
 #include "mod-ollama-chat-utilities.h"
 #include "Log.h"
 #include "Player.h"
@@ -31,6 +32,12 @@ std::string g_SystemPrompt;
 std::string g_ChatTask;
 std::string g_RandomTask;
 std::string g_EventTask;
+std::string g_EventTaskCombat;
+std::string g_EventTaskLoot;
+std::string g_EventTaskQuest;
+std::string g_EventTaskProgress;
+std::string g_EventTaskSocial;
+std::string g_EventTaskObject;
 std::string g_SentimentTask;
 std::string g_HedgeSection;
 std::string g_VagueKnowledgeSection;
@@ -39,6 +46,44 @@ std::string g_MemoryMaintenanceTask;
 bool g_PromptFilesLoaded = false;
 std::string g_ChannelGeneral;
 std::string g_ChannelGeneralRandom;
+
+std::string const& EventTaskForImpl(EventKind kind)
+{
+    switch (kind)
+    {
+        case EventKind::Defeated:
+        case EventKind::DefeatedPlayer:
+        case EventKind::PetDefeated:
+        case EventKind::Died:
+            return !g_EventTaskCombat.empty() ? g_EventTaskCombat : g_EventTask;
+        case EventKind::GotItem:
+        case EventKind::GuildEpicGear:
+        case EventKind::GuildRareGear:
+            return !g_EventTaskLoot.empty() ? g_EventTaskLoot : g_EventTask;
+        case EventKind::CompletedQuest:
+        case EventKind::GuildDungeonComplete:
+            return !g_EventTaskQuest.empty() ? g_EventTaskQuest : g_EventTask;
+        case EventKind::LearnedSpell:
+        case EventKind::LeveledUp:
+        case EventKind::Achievement:
+        case EventKind::GuildAchievement:
+        case EventKind::GuildLevelUp:
+            return !g_EventTaskProgress.empty() ? g_EventTaskProgress : g_EventTask;
+        case EventKind::UsedObject:
+            return !g_EventTaskObject.empty() ? g_EventTaskObject : g_EventTask;
+        case EventKind::RequestedDuel:
+        case EventKind::StartedDueling:
+        case EventKind::WonDuel:
+        case EventKind::GuildJoin:
+        case EventKind::GuildLeave:
+        case EventKind::GuildPromotion:
+        case EventKind::GuildDemotion:
+        case EventKind::GuildLogin:
+            return !g_EventTaskSocial.empty() ? g_EventTaskSocial : g_EventTask;
+        default:
+            return g_EventTask;
+    }
+}
 
 constexpr char const* kPromptFallbackPaths[] = {
     "/azerothcore/modules/mod-ollama-chat/data/prompts/",
@@ -351,6 +396,11 @@ static std::string MergeSystemPrompts()
 }
 } // namespace
 
+std::string const& EventTaskFor(EventKind kind)
+{
+    return EventTaskForImpl(kind);
+}
+
 std::string RandomIntentTaskLine(RandomIntent intent, ChatChannelSourceLocal channel)
 {
     if (channel == SRC_GENERAL_LOCAL)
@@ -399,6 +449,12 @@ void OllamaPromptComposer::LoadPromptFiles()
     load("chat_task.txt", g_ChatTask, "Reply to the player's message only.");
     load("random_task.txt", g_RandomTask, "Say one short casual line.");
     load("event_task.txt", g_EventTask, "React briefly to the event.");
+    load("events/combat.txt", g_EventTaskCombat, "");
+    load("events/loot.txt", g_EventTaskLoot, "");
+    load("events/quest.txt", g_EventTaskQuest, "");
+    load("events/progress.txt", g_EventTaskProgress, "");
+    load("events/social.txt", g_EventTaskSocial, "");
+    load("events/object.txt", g_EventTaskObject, "");
     load("sentiment_task.txt", g_SentimentTask,
          "Respond with only POSITIVE, NEGATIVE, or NEUTRAL.");
     load("sections/hedge.txt", g_HedgeSection,
@@ -408,7 +464,8 @@ void OllamaPromptComposer::LoadPromptFiles()
     load("sections/factual_hint.txt", g_FactualHintSection,
          "Answer the factual question directly or admit uncertainty.");
     load("memory_flush.txt", g_MemoryMaintenanceTask,
-         "Update player memory from chat. Reply only.\n[FACTS]\nOne fact per line.\n[NOTES]\nPlayer preferences only.");
+         "Update player memory from chat. Reply with JSON only: "
+         "{\"summary\":\"...\",\"facts\":[\"...\"],\"notes\":[\"...\"]}.");
     load("channels/general.txt", g_ChannelGeneral, "");
     load("channels/general_random.txt", g_ChannelGeneralRandom, "");
 
@@ -737,7 +794,7 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
             task << g_RandomTask << "\n" << RandomIntentTaskLine(input.randomIntent, input.chatChannel);
             break;
         case PromptScenario::EventReaction:
-            task << g_EventTask;
+            task << (!input.eventTask.empty() ? input.eventTask : g_EventTask);
             if (input.chatChannel == SRC_GENERAL_LOCAL)
                 task << "\nOne short reaction in zone chat, not a speech.";
             break;
@@ -823,7 +880,7 @@ std::string GetBotCompactNearbySection(Player* bot)
 }
 
 void EnrichPromptBundle(PromptBundle& bundle, Player* bot, BotContext const& ctx,
-    Player* playerOrNull, ChatChannelSourceLocal channel, bool randomAmbient)
+    Player* playerOrNull, ChatChannelSourceLocal channel, bool randomAmbient, bool forceSnapshot)
 {
     if (!bot)
         return;
@@ -851,7 +908,7 @@ void EnrichPromptBundle(PromptBundle& bundle, Player* bot, BotContext const& ctx
         AppendSection(extra, "Party", ctx.groupCtx.partySection);
     bundle.user = extra.str() + bundle.user;
 
-    if (g_EnableChatBotSnapshotTemplate && channel != SRC_GENERAL_LOCAL)
+    if (forceSnapshot || (g_EnableChatBotSnapshotTemplate && channel != SRC_GENERAL_LOCAL))
         bundle.user += GenerateBotGameStateSnapshot(bot, ctx.groupCtx.memberCount > 0);
 }
 
@@ -877,17 +934,20 @@ PromptBundle BuildPlayerChatPrompt(Player* bot, Player* player, std::string cons
     input.chatChannel = channel;
     input.chatIntent = intent;
     input.verificationFeedback = verificationFeedback;
-    input.factualQuestion = OllamaPromptComposer::IsFactualQuestion(playerMessage);
+    input.factualQuestion = false;
 
     std::vector<DungeonMatch> resolved;
     if (g_RAGSystem)
     {
         resolved = g_RAGSystem->ResolveAcronyms(playerMessage, ctx.botLevel);
         if (!resolved.empty())
+        {
             input.dungeonHintSection = g_RAGSystem->FormatEligibilityHint(resolved, ctx.botLevel);
+            input.factualQuestion = true;
+        }
     }
     bool const dungeonHit = !resolved.empty();
-    bool const factualRag = input.factualQuestion || dungeonHit || intent.partyInvite;
+    bool const factualRag = dungeonHit || intent.partyInvite;
 
     input.intentTaskLines = BuildIntentTaskLines(intent);
 
@@ -957,8 +1017,27 @@ static void ApplyRagToInput(BotContext const& ctx, ScenarioInput& input, std::st
             results.resize(1);
     }
 
-    KnowledgeLevel level = pinMatches && !pinMatches->empty() ? KnowledgeLevel::Full
+    bool const licensed = pinMatches && !pinMatches->empty();
+    if (!licensed)
+    {
+        results.erase(std::remove_if(results.begin(), results.end(),
+            [](RAGResult const& r) {
+                if (!r.entry)
+                    return false;
+                for (std::string const& tag : r.entry->tags)
+                {
+                    if (tag.rfind("level:", 0) == 0)
+                        return true;
+                }
+                return false;
+            }), results.end());
+    }
+
+    KnowledgeLevel level = licensed ? KnowledgeLevel::Full
         : OllamaPromptComposer::RollKnowledgeLevel(ctx, results);
+    if (!licensed && level == KnowledgeLevel::Full)
+        level = KnowledgeLevel::Hedge;
+
     input.knowledgeSection = OllamaPromptComposer::BuildKnowledgeSection(
         level, g_RAGSystem->GetFormattedRAGInfo(results));
     input.knowledgeLevel = level;
@@ -984,14 +1063,16 @@ PromptBundle BuildRandomChatterPrompt(Player* bot, std::string const& environmen
     return bundle;
 }
 
-PromptBundle BuildEventReactionPrompt(Player* bot, Player* actorPlayer, std::string const& eventType,
-    std::string const& eventDetail, std::string const& actorName, ChatChannelSourceLocal channel)
+PromptBundle BuildEventReactionPrompt(Player* bot, Player* actorPlayer,
+    std::string const& eventType, std::string const& eventDetail, std::string const& eventTask,
+    std::string const& actorName, ChatChannelSourceLocal channel)
 {
     BotContext ctx = OllamaPromptComposer::GatherBotContext(bot, actorPlayer);
     ctx.personalityLine = GetPersonalityPromptForChannel(ctx.personalityKey, channel);
     ScenarioInput input;
     input.eventType = eventType;
     input.eventDetail = eventDetail;
+    input.eventTask = eventTask;
     input.actorName = actorName;
     input.chatChannel = channel;
 
@@ -1000,7 +1081,7 @@ PromptBundle BuildEventReactionPrompt(Player* bot, Player* actorPlayer, std::str
 
     if (actorPlayer && g_EnableMemory)
     {
-        std::string query = eventType + ": " + eventDetail;
+        std::string query = input.eventType + ": " + input.eventDetail;
         input.memorySection = GetMemoryPromptAddition(
             bot->GetGUID().GetRawValue(),
             actorPlayer->GetGUID().GetRawValue(),
@@ -1009,11 +1090,12 @@ PromptBundle BuildEventReactionPrompt(Player* bot, Player* actorPlayer, std::str
             actorPlayer->GetName());
     }
 
-    std::string ragQuery = OllamaPromptComposer::BuildRagQuery(eventType + " " + eventDetail, ctx.botZone, ctx.botArea);
+    std::string ragQuery = OllamaPromptComposer::BuildRagQuery(
+        input.eventType + " " + input.eventDetail, ctx.botZone, ctx.botArea);
     ApplyRagToInput(ctx, input, ragQuery, false, PromptScenario::EventReaction);
     input.contextSection = BuildBotPromptContext(bot);
 
     PromptBundle bundle = OllamaPromptComposer::Build(PromptScenario::EventReaction, ctx, input);
-    EnrichPromptBundle(bundle, bot, ctx, actorPlayer, channel);
+    EnrichPromptBundle(bundle, bot, ctx, actorPlayer, channel, false, true);
     return bundle;
 }

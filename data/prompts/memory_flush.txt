@@ -1,11 +1,9 @@
-Update stored memory for {playerName} from the recent turns. Output only the three sections below.
-Record only stable, verifiable facts about {playerName}. Ignore jokes, sarcasm, roleplay, trash talk, boasts, and one-off banter.
+Update stored memory for {playerName} from the recent turns. Output only one JSON object, no other text.
+Record only stable, verifiable facts about {playerName}. Keep durable nicknames and relationship facts when they appear as stable.
 Never store your own lines ({botName}) as {playerName}'s facts. Never store a zone, dungeon, NPC, quest, or item as if it were the player.
 Do not store bot level excuses or bot dungeon claims as player beliefs.
-Keep prior facts and notes unless the new turns correct them. If nothing durable was learned, repeat the existing memory.
-[SUMMARY]
-One or two sentences on your history and relationship with {playerName}.
-[FACTS]
-Durable facts about {playerName}, one per line, max 8. E.g. "Plays a Tauren druid." or "Looking for a group for Wailing Caverns."
-[NOTES]
-{playerName}'s stable preferences only, max 3 lines.
+Never write race, class, level, or faction. Those come from the game.
+Never store greetings or typos as alt names. Never store lines that start with "Player:" or "Bot:".
+Keep prior facts and notes unless the new turns correct them. If nothing durable was learned, output {"summary":"","facts":[],"notes":[]} and the prior memory is kept.
+summary = short relationship history. facts = up to 8 durable player facts. notes = up to 3 stable preferences.
+{"summary":"","facts":[],"notes":[]}

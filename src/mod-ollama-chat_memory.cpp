@@ -3,10 +3,12 @@
 #include "mod-ollama-chat_prompt.h"
 #include "mod-ollama-chat_api.h"
 #include "mod-ollama-chat-utilities.h"
+#include "mod-ollama-chat_events.h"
 #include "Log.h"
 #include "DatabaseEnv.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include <nlohmann/json.hpp>
 #include <fmt/core.h>
 #include <algorithm>
 #include <unordered_map>
@@ -250,20 +252,91 @@ static std::string StripMaintenancePlaceholders(std::string s)
     return out.str();
 }
 
+static std::string JoinJsonStringList(nlohmann::json const& node)
+{
+    if (node.is_string())
+        return StripMaintenancePlaceholders(node.get<std::string>());
+    if (!node.is_array())
+        return "";
+
+    std::ostringstream out;
+    bool first = true;
+    for (auto const& item : node)
+    {
+        if (!item.is_string())
+            continue;
+        std::string line = StripMaintenancePlaceholders(item.get<std::string>());
+        if (line.empty())
+            continue;
+        if (!first)
+            out << '\n';
+        out << line;
+        first = false;
+    }
+    return out.str();
+}
+
+// Returns: 1 = non-empty JSON, 0 = empty JSON object (keep-prior), -1 = not JSON / parse fail.
+static int TryParseMaintenanceJson(std::string const& s, std::string& summary, std::string& facts, std::string& notes)
+{
+    size_t jsonStart = s.find('{');
+    size_t jsonEnd = s.rfind('}');
+    if (jsonStart == std::string::npos || jsonEnd == std::string::npos || jsonEnd <= jsonStart)
+        return -1;
+
+    try
+    {
+        nlohmann::json j = nlohmann::json::parse(s.substr(jsonStart, jsonEnd - jsonStart + 1));
+        if (!j.is_object())
+            return -1;
+
+        if (j.contains("summary") && j["summary"].is_string())
+            summary = StripMaintenancePlaceholders(j["summary"].get<std::string>());
+        if (j.contains("facts"))
+            facts = JoinJsonStringList(j["facts"]);
+        if (j.contains("notes"))
+            notes = JoinJsonStringList(j["notes"]);
+
+        if (!summary.empty() || !facts.empty() || !notes.empty())
+            return 1;
+
+        summary.clear();
+        facts.clear();
+        notes.clear();
+        return 0;
+    }
+    catch (nlohmann::json::exception const&)
+    {
+        return -1;
+    }
+}
+
+static bool TryParseMaintenanceMarkers(std::string const& s, std::string& summary, std::string& facts, std::string& notes)
+{
+    if (s.find(kSummaryMarker) == std::string::npos &&
+        s.find(kFactsMarker) == std::string::npos &&
+        s.find(kNotesMarker) == std::string::npos)
+        return false;
+
+    summary = StripMaintenancePlaceholders(ExtractSection(s, kSummaryMarker, kFactsMarker));
+    facts = StripMaintenancePlaceholders(ExtractSection(s, kFactsMarker, kNotesMarker));
+    notes = StripMaintenancePlaceholders(ExtractSection(s, kNotesMarker, nullptr));
+    return true;
+}
+
 static bool ParseMaintenanceResponse(std::string const& raw, std::string& summary, std::string& facts, std::string& notes)
 {
     std::string s = TrimMemoryResponse(raw);
     if (s.empty())
         return false;
-    size_t sPos = s.find(kSummaryMarker);
-    size_t fPos = s.find(kFactsMarker);
-    size_t nPos = s.find(kNotesMarker);
-    if (sPos == std::string::npos && fPos == std::string::npos && nPos == std::string::npos)
-        return false;
-    summary = StripMaintenancePlaceholders(ExtractSection(s, kSummaryMarker, kFactsMarker));
-    facts = StripMaintenancePlaceholders(ExtractSection(s, kFactsMarker, kNotesMarker));
-    notes = StripMaintenancePlaceholders(ExtractSection(s, kNotesMarker, nullptr));
-    return true;
+
+    int jsonResult = TryParseMaintenanceJson(s, summary, facts, notes);
+    if (jsonResult == 1)
+        return true;
+    if (TryParseMaintenanceMarkers(s, summary, facts, notes))
+        return true;
+    // Empty JSON with no markers = intentional keep-prior success.
+    return jsonResult == 0;
 }
 
 static void AppendDialogueTurn(std::ostringstream& out, std::string const& playerName,
@@ -326,24 +399,34 @@ static bool ShouldDropFactLine(std::string const& line, std::vector<Conversation
 {
     for (ConversationTurn const& turn : turns)
     {
+        if (line == turn.botReply || line == turn.playerMessage)
+            return true;
+        if (line == "Player: " + turn.playerMessage || line == "Bot: " + turn.botReply)
+            return true;
         if (TokenOverlapRatio(line, turn.botReply) > 0.6f)
             return true;
     }
     return false;
 }
 
-static std::string SanitizePlayerFacts(std::string const& facts, std::vector<ConversationTurn> const& turns)
+static std::string ValidateMemoryLines(std::string const& text, std::vector<ConversationTurn> const& turns,
+    uint32_t maxLines)
 {
+    std::unordered_set<std::string> seen;
     std::ostringstream out;
+    uint32_t count = 0;
     bool first = true;
-    for (std::string const& line : SplitFactLines(facts))
+    for (std::string const& line : SplitFactLines(text))
     {
-        if (ShouldDropFactLine(line, turns))
+        if (ShouldDropFactLine(line, turns) || !seen.insert(line).second)
             continue;
+        if (count >= maxLines)
+            break;
         if (!first)
             out << "\n";
         first = false;
         out << line;
+        ++count;
     }
     return out.str();
 }
@@ -745,47 +828,79 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
     std::string botName = bot ? bot->GetName() : "Bot";
 
     std::ostringstream turnsBlock;
+    uint32_t chatPending = 0;
     for (ConversationTurn const& turn : pendingTurns)
+    {
+        if (turn.isEvent)
+            continue;
+        ++chatPending;
         AppendDialogueTurn(turnsBlock, playerName, botName, turn, !turn.verified);
-
-    ScenarioInput input;
-    input.maintenanceSummary = existingSummary;
-    input.maintenanceFacts = existingFacts;
-    input.maintenanceNotes = existingNotes;
-    input.maintenanceTurns = turnsBlock.str();
-    input.maintenancePlayerName = playerName;
-    input.maintenanceBotName = botName;
-
-    PromptBundle bundle = OllamaPromptComposer::Build(PromptScenario::MemoryMaintenance, {}, input);
-    bundle.maxTokens = OllamaMemory::MemoryQueryMaxTokens;
-    auto future = SubmitQuery(bundle);
-    std::string response = future.valid() ? future.get() : "";
+    }
 
     std::string newSummary = existingSummary;
     std::string newFacts = existingFacts;
     std::string newNotes = existingNotes;
-    bool parsed = false;
-    if (!response.empty())
-    {
-        std::string llmSummary;
-        std::string llmFacts;
-        std::string llmNotes;
-        parsed = ParseMaintenanceResponse(response, llmSummary, llmFacts, llmNotes);
-        if (parsed)
-        {
-            if (!llmSummary.empty())
-                newSummary = llmSummary;
-            if (!llmFacts.empty())
-                newFacts = SanitizePlayerFacts(llmFacts, pendingTurns);
-            if (!llmNotes.empty())
-                newNotes = llmNotes;
-        }
-    }
+    bool failed = false;
 
-    bool const failed = response.empty() || !parsed;
-    newSummary = TruncateMemory(newSummary, OllamaMemory::NotesMaxChars);
-    newFacts = TruncateMemory(newFacts, OllamaMemory::FactsMaxChars);
-    newNotes = TruncateMemory(newNotes, OllamaMemory::NotesMaxChars);
+    if (chatPending == 0)
+    {
+        // Event-only pending: advance watermark/archive without LLM rewrite.
+    }
+    else
+    {
+        ScenarioInput input;
+        input.maintenanceSummary = existingSummary;
+        input.maintenanceFacts = existingFacts;
+        input.maintenanceNotes = existingNotes;
+        input.maintenanceTurns = turnsBlock.str();
+        input.maintenancePlayerName = playerName;
+        input.maintenanceBotName = botName;
+
+        PromptBundle bundle = OllamaPromptComposer::Build(PromptScenario::MemoryMaintenance, {}, input);
+        bundle.maxTokens = OllamaMemory::MemoryQueryMaxTokens;
+        auto future = SubmitQuery(bundle);
+        std::string response = future.valid() ? future.get() : "";
+
+        bool parsed = false;
+        if (!response.empty())
+        {
+            std::string llmSummary;
+            std::string llmFacts;
+            std::string llmNotes;
+            parsed = ParseMaintenanceResponse(response, llmSummary, llmFacts, llmNotes);
+            if (parsed)
+            {
+                if (!llmSummary.empty())
+                    newSummary = llmSummary;
+                // Empty after validation: keep prior (do not wipe good memory).
+                // Contamination checks use chat turns only - event replies must not drop chat facts.
+                std::vector<ConversationTurn> chatTurns;
+                chatTurns.reserve(pendingTurns.size());
+                for (ConversationTurn const& turn : pendingTurns)
+                {
+                    if (!turn.isEvent)
+                        chatTurns.push_back(turn);
+                }
+                if (!llmFacts.empty())
+                {
+                    std::string validated = ValidateMemoryLines(llmFacts, chatTurns, 8);
+                    if (!validated.empty())
+                        newFacts = validated;
+                }
+                if (!llmNotes.empty())
+                {
+                    std::string validated = ValidateMemoryLines(llmNotes, chatTurns, 3);
+                    if (!validated.empty())
+                        newNotes = validated;
+                }
+            }
+        }
+
+        failed = response.empty() || !parsed;
+        newSummary = TruncateMemory(newSummary, OllamaMemory::NotesMaxChars);
+        newFacts = TruncateMemory(newFacts, OllamaMemory::FactsMaxChars);
+        newNotes = TruncateMemory(newNotes, OllamaMemory::NotesMaxChars);
+    }
 
     time_t now = time(nullptr);
     std::vector<std::pair<std::string, std::string>> archiveInserts;
@@ -810,7 +925,7 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
             newFacts = existingFacts;
             newNotes = existingNotes;
         }
-        else
+        else if (chatPending > 0)
         {
             pair.summary = newSummary;
             pair.facts = newFacts;
@@ -843,8 +958,8 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
     if (failed)
     {
         SetMaintenanceFailCooldown(botGuid, playerGuid);
-        LOG_WARN("server.loading", "[OllamaChat] Memory maintenance failed bot {} player {}: {}",
-            botGuid, playerGuid, response.empty() ? "empty LLM response" : "parse fail");
+        LOG_WARN("server.loading", "[OllamaChat] Memory maintenance failed bot {} player {}",
+            botGuid, playerGuid);
     }
 
     std::string escSummary = newSummary;
@@ -870,12 +985,16 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
     }
 
     std::string lastAtSql = "NULL";
+    std::string compactedAtSql = "NULL";
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
         if (PairMemoryState* pair = GetPairUnlocked(botGuid, playerGuid))
         {
             if (pair->lastPlayerAt)
                 lastAtSql = SafeFormat("FROM_UNIXTIME({})", static_cast<uint64_t>(pair->lastPlayerAt));
+            // Event-only / failed runs do not touch lastMaintenanceAt - preserve DB timestamp.
+            if (pair->lastMaintenanceAt)
+                compactedAtSql = SafeFormat("FROM_UNIXTIME({})", static_cast<uint64_t>(pair->lastMaintenanceAt));
         }
     }
 
@@ -886,8 +1005,8 @@ static bool RunMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
     trans->Append(SafeFormat(
         "REPLACE INTO mod_ollama_chat_memory_semantic (bot_guid, player_guid, player_name, memory_text, facts_text, notes_text, "
         "last_player_at, compacted_turn_count, last_compacted_at) VALUES "
-        "({}, {}, '{}', '{}', '{}', '{}', {}, {}, NOW())",
-        botGuid, playerGuid, escName, escSummary, escFacts, escNotes, lastAtSql, newWm));
+        "({}, {}, '{}', '{}', '{}', '{}', {}, {}, {})",
+        botGuid, playerGuid, escName, escSummary, escFacts, escNotes, lastAtSql, newWm, compactedAtSql));
 
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
@@ -1058,7 +1177,7 @@ static void LoadPairFromDB(uint64_t botGuid, uint64_t playerGuid)
 
     if (QueryResult result = CharacterDatabase.Query(SafeFormat(
             "SELECT player_name, memory_text, facts_text, notes_text, "
-            "UNIX_TIMESTAMP(last_player_at), compacted_turn_count "
+            "UNIX_TIMESTAMP(last_player_at), compacted_turn_count, UNIX_TIMESTAMP(last_compacted_at) "
             "FROM mod_ollama_chat_memory_semantic WHERE bot_guid = {} AND player_guid = {}",
             botGuid, playerGuid)))
     {
@@ -1069,6 +1188,8 @@ static void LoadPairFromDB(uint64_t botGuid, uint64_t playerGuid)
         if (!(*result)[4].IsNull())
             loaded.lastPlayerAt = static_cast<time_t>((*result)[4].Get<uint64_t>());
         wm = (*result)[5].Get<uint32_t>();
+        if (!(*result)[6].IsNull())
+            loaded.lastMaintenanceAt = static_cast<time_t>((*result)[6].Get<uint64_t>());
         hasRow = true;
 
         if (LooksLikeLegacyMemoryText(memoryText))
@@ -1121,6 +1242,8 @@ static void LoadPairFromDB(uint64_t botGuid, uint64_t playerGuid)
                 pair.playerName = loaded.playerName;
             if (!pair.lastPlayerAt)
                 pair.lastPlayerAt = loaded.lastPlayerAt;
+            if (!pair.lastMaintenanceAt)
+                pair.lastMaintenanceAt = loaded.lastMaintenanceAt;
         }
         if (pair.archiveRing.empty() && !loaded.archiveRing.empty())
             pair.archiveRing = std::move(loaded.archiveRing);
@@ -1182,6 +1305,27 @@ void InitializeBotMemory()
     LOG_INFO("server.loading", "[OllamaChat] Bot memory system initialized");
 }
 
+static bool LooksLikeStoredEventTurn(std::string const& playerMessage)
+{
+    // New writes use FormatEventHistoryContext ("evt|kind: detail").
+    if (playerMessage.compare(0, 4, "evt|") == 0)
+        return true;
+
+    // Legacy empty-type events were stored as ": detail".
+    if (playerMessage.size() >= 2 && playerMessage[0] == ':' && playerMessage[1] == ' ')
+        return true;
+
+    // Legacy typed rows before the sentinel (code labels only, not conf strings).
+    for (uint8_t i = 0; i < static_cast<uint8_t>(EventKind::COUNT); ++i)
+    {
+        char const* label = EventKindLabel(static_cast<EventKind>(i));
+        std::string const prefix = std::string(label) + ": ";
+        if (playerMessage.compare(0, prefix.size(), prefix) == 0)
+            return true;
+    }
+    return false;
+}
+
 static void LoadBotMemoryFromDB()
 {
     if (!g_EnableMemory)
@@ -1196,7 +1340,7 @@ static void LoadBotMemoryFromDB()
 
         if (QueryResult result = CharacterDatabase.Query(
                 "SELECT bot_guid, player_guid, player_name, memory_text, facts_text, notes_text, "
-                "UNIX_TIMESTAMP(last_player_at), compacted_turn_count "
+                "UNIX_TIMESTAMP(last_player_at), compacted_turn_count, UNIX_TIMESTAMP(last_compacted_at) "
                 "FROM mod_ollama_chat_memory_semantic"))
         {
             do
@@ -1224,6 +1368,8 @@ static void LoadBotMemoryFromDB()
                 pair.playerName = (*result)[2].Get<std::string>();
                 if (!(*result)[6].IsNull())
                     pair.lastPlayerAt = static_cast<time_t>((*result)[6].Get<uint64_t>());
+                if (!(*result)[8].IsNull())
+                    pair.lastMaintenanceAt = static_cast<time_t>((*result)[8].Get<uint64_t>());
                 pair.cacheLastUsed = time(nullptr);
             } while (result->NextRow());
         }
@@ -1275,7 +1421,8 @@ static void LoadBotMemoryFromDB()
                 std::string ctx = (*epResult)[2].Get<std::string>();
                 std::string reply = (*epResult)[3].Get<std::string>();
                 time_t ts = (*epResult)[4].IsNull() ? time(nullptr) : static_cast<time_t>((*epResult)[4].Get<uint64_t>());
-                g_BotConversationHistory[botGuid][playerGuid].push_back({ ctx, reply, true });
+                g_BotConversationHistory[botGuid][playerGuid].push_back(
+                    { ctx, reply, true, LooksLikeStoredEventTurn(ctx) });
                 g_TurnTimestamps[botGuid][playerGuid].push_back(ts);
 
                 auto& hist = g_BotConversationHistory[botGuid][playerGuid];
@@ -1313,7 +1460,7 @@ static void LoadBotMemoryFromDB()
                 std::string playerMsg = (*legacy)[2].Get<std::string>();
                 std::string botReply = (*legacy)[3].Get<std::string>();
                 time_t ts = (*legacy)[4].IsNull() ? time(nullptr) : static_cast<time_t>((*legacy)[4].Get<uint64_t>());
-                hist.push_back({ playerMsg, botReply, true });
+                hist.push_back({ playerMsg, botReply, true, LooksLikeStoredEventTurn(playerMsg) });
                 g_TurnTimestamps[botGuid][playerGuid].push_back(ts);
                 g_CompactedTurnCount[botGuid][playerGuid] = 0;
 
@@ -1371,6 +1518,7 @@ bool SaveBotMemoryToDB(bool blocking)
         std::string notes;
         std::string playerName;
         time_t lastPlayerAt;
+        time_t lastMaintenanceAt;
         uint32_t watermark;
     };
 
@@ -1400,6 +1548,7 @@ bool SaveBotMemoryToDB(bool blocking)
                     pair.notes,
                     pair.playerName,
                     pair.lastPlayerAt,
+                    pair.lastMaintenanceAt,
                     GetWatermark(botGuid, playerGuid)
                 });
                 trimPairs.emplace(botGuid, playerGuid);
@@ -1430,6 +1579,13 @@ bool SaveBotMemoryToDB(bool blocking)
     // rather than one blocking commit per pair.
     CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
 
+    auto contentIfFresher = [](char const* col, uint64_t maintAt) {
+        // Only overwrite compacted content when this RAM snapshot has a successful maintenance.
+        return SafeFormat(
+            "{} = IF({} > 0 AND (last_compacted_at IS NULL OR last_compacted_at <= FROM_UNIXTIME({})), VALUES({}), {})",
+            col, maintAt, maintAt, col, col);
+    };
+
     for (auto const& row : semanticRows)
     {
         std::string escSummary = row.summary;
@@ -1441,11 +1597,25 @@ bool SaveBotMemoryToDB(bool blocking)
         CharacterDatabase.EscapeString(escNotes);
         CharacterDatabase.EscapeString(escName);
         std::string lastAtSql = row.lastPlayerAt ? SafeFormat("FROM_UNIXTIME({})", static_cast<uint64_t>(row.lastPlayerAt)) : "NULL";
+        uint64_t maintAt = static_cast<uint64_t>(row.lastMaintenanceAt);
+        std::string compactedAtSql = maintAt ? SafeFormat("FROM_UNIXTIME({})", maintAt) : "NULL";
+
         trans->Append(SafeFormat(
-            "REPLACE INTO mod_ollama_chat_memory_semantic (bot_guid, player_guid, player_name, memory_text, facts_text, notes_text, "
+            "INSERT INTO mod_ollama_chat_memory_semantic (bot_guid, player_guid, player_name, memory_text, facts_text, notes_text, "
             "last_player_at, compacted_turn_count, last_compacted_at) VALUES "
-            "({}, {}, '{}', '{}', '{}', '{}', {}, {}, NOW())",
-            row.botGuid, row.playerGuid, escName, escSummary, escFacts, escNotes, lastAtSql, row.watermark));
+            "({}, {}, '{}', '{}', '{}', '{}', {}, {}, {}) "
+            "ON DUPLICATE KEY UPDATE "
+            "player_name = IF(VALUES(player_name) <> '', VALUES(player_name), player_name), "
+            "{}, {}, {}, {}, "
+            "last_player_at = IF(VALUES(last_player_at) IS NOT NULL, VALUES(last_player_at), last_player_at), "
+            "{}",
+            row.botGuid, row.playerGuid, escName, escSummary, escFacts, escNotes, lastAtSql, row.watermark,
+            compactedAtSql,
+            contentIfFresher("memory_text", maintAt),
+            contentIfFresher("facts_text", maintAt),
+            contentIfFresher("notes_text", maintAt),
+            contentIfFresher("compacted_turn_count", maintAt),
+            contentIfFresher("last_compacted_at", maintAt)));
     }
 
     for (auto const& row : episodicRows)
@@ -1545,7 +1715,7 @@ void MaybeEnqueueMemoryMaintenance(uint64_t botGuid, uint64_t playerGuid)
 }
 
 void AppendBotMemoryTurn(uint64_t botGuid, uint64_t playerGuid, std::string const& playerMessage,
-    std::string const& botReply, bool /*isEvent*/, bool verified)
+    std::string const& botReply, bool isEvent, bool verified)
 {
     std::vector<std::pair<std::string, std::string>> toFlush;
     time_t now = time(nullptr);
@@ -1553,7 +1723,7 @@ void AppendBotMemoryTurn(uint64_t botGuid, uint64_t playerGuid, std::string cons
     {
         std::lock_guard<std::mutex> lock(g_ConversationHistoryMutex);
         auto& hist = g_BotConversationHistory[botGuid][playerGuid];
-        hist.push_back({ playerMessage, botReply, verified });
+        hist.push_back({ playerMessage, botReply, verified, isEvent });
         g_TurnTimestamps[botGuid][playerGuid].push_back(now);
 
         PairMemoryState& pair = TouchPairUnlocked(botGuid, playerGuid);

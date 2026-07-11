@@ -3,13 +3,53 @@
 
 #include "ScriptMgr.h"
 #include "Player.h"
+#include <cstdint>
 #include <string>
+
+enum class EventKind : uint8_t
+{
+    Defeated,
+    DefeatedPlayer,
+    PetDefeated,
+    GotItem,
+    Died,
+    CompletedQuest,
+    LearnedSpell,
+    RequestedDuel,
+    StartedDueling,
+    WonDuel,
+    LeveledUp,
+    Achievement,
+    UsedObject,
+    GuildEpicGear,
+    GuildRareGear,
+    GuildJoin,
+    GuildLeave,
+    GuildPromotion,
+    GuildDemotion,
+    GuildLogin,
+    GuildAchievement,
+    GuildLevelUp,
+    GuildDungeonComplete,
+    COUNT
+};
+
+struct EventDetail
+{
+    std::string display;
+    uint32 id = 0;
+};
+
+char const* EventKindLabel(EventKind kind);
+bool IsGuildEventKind(EventKind kind);
+std::string FormatEventHistoryContext(EventKind kind, std::string const& display);
+std::string const& EventTaskFor(EventKind kind);
 
 class OllamaBotEventChatter
 {
 public:
-    void DispatchGameEvent(Player* source, std::string type, std::string detail);
-    void QueueEvent(Player* bot, std::string type, std::string detail, std::string actorName, bool isGuildEvent = false);
+    void DispatchGameEvent(Player* source, EventKind kind, EventDetail const& detail);
+    void QueueEvent(Player* bot, EventKind kind, EventDetail const& detail, std::string actorName, bool isGuildEvent = false);
 };
 
 class ChatOnKill : public PlayerScript
