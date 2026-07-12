@@ -37,6 +37,7 @@
 #include "mod-ollama-chat_memory.h"
 #include "mod-ollama-chat_rag.h"
 #include "mod-ollama-chat_prompt.h"
+#include "mod-ollama-chat_random.h"
 #include "mod-ollama-chat_sanitize.h"
 #include "mod-ollama-chat_verify.h"
 #include <iomanip>
@@ -220,6 +221,12 @@ static void EnsureBotInChannel(Player* player, Channel* channel)
 void PlayerBotChatHandler::OnPlayerLogin(Player* player)
 {
     EnsureBotInCityChannels(player);
+}
+
+void PlayerBotChatHandler::OnPlayerLogout(Player* player)
+{
+    if (player)
+        ClearBotRandomChatterState(player->GetGUID().GetRawValue());
 }
 
 void PlayerBotChatHandler::OnPlayerUpdateZone(Player* player, uint32 /*newZone*/, uint32 /*newArea*/)

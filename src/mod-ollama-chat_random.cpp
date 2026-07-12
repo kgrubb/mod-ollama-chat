@@ -25,6 +25,10 @@
 #include <initializer_list>
 #include <thread>
 #include <ctime>
+#include <atomic>
+#include <unordered_map>
+#include <unordered_set>
+#include <mutex>
 #include "Item.h"
 #include "Bag.h"
 #include "SpellMgr.h"
@@ -62,14 +66,9 @@ struct BotAudience
     bool partyHasRealPlayer = false;
 };
 
-bool IsRealPlayer(Player* player)
-{
-    return player && player->IsInWorld() && !PlayerbotsMgr::instance().GetPlayerbotAI(player);
-}
-
 void UpdateBotAudience(BotAudience& audience, Player* bot, Player* player)
 {
-    if (!IsRealPlayer(player))
+    if (!::IsRealPlayer(player) || !player->IsInWorld())
         return;
     float const dist = bot->GetDistance(player);
     if (dist <= g_RandomChatterRealPlayerDistance)
@@ -91,7 +90,7 @@ bool BotEligibleForRandomChatter(Player* bot, std::vector<Player*> const& realPl
     Guild* guild = bot->GetGuild();
     for (Player* player : realPlayers)
     {
-        if (!IsRealPlayer(player))
+        if (!::IsRealPlayer(player) || !player->IsInWorld())
             continue;
         if (guild && player->GetGuild() && player->GetGuild()->GetId() == guild->GetId())
             return true;
@@ -153,7 +152,9 @@ PromptBundle BuildRandomChatterPromptBundle(Player* bot, std::string const& envi
         fmt::arg("bot_map", bot->GetMap() ? bot->GetMap()->GetMapName() : "UnknownMap"),
         fmt::arg("bot_personality", personalityPrompt),
         fmt::arg("bot_personality_name", personality),
-        fmt::arg("environment_info", environmentInfo));
+        // OwnActivity uses ## Activity via Enrich; do not also embed the seed here.
+        fmt::arg("environment_info",
+            intent == RandomIntent::OwnActivity ? std::string{} : environmentInfo));
 
     if (environmentInfo.empty())
     {
@@ -176,12 +177,50 @@ PromptBundle BuildRandomChatterPromptBundle(Player* bot, std::string const& envi
     bundle.user += " " + RandomIntentTaskLine(intent);
 
     BotContext ctx = OllamaPromptComposer::GatherBotContext(bot, nullptr);
-    EnrichPromptBundle(bundle, bot, ctx, nullptr, channel);
+    if (intent == RandomIntent::OwnActivity && !environmentInfo.empty())
+        ctx.activityLine = environmentInfo;
+    EnrichPromptBundle(bundle, bot, ctx, nullptr, channel, true);
     return bundle;
 }
 } // namespace
 
 std::unordered_map<uint64_t, time_t> nextRandomChatTime;
+std::unordered_map<uint64_t, std::string> lastAmbientActivityKey;
+std::unordered_set<uint64_t> pendingTransitionBark;
+std::unordered_map<uint64_t, uint32_t> ambientBarkEpoch;
+std::unordered_map<uint64_t, uint32_t> randomSpeakInFlight; // guid -> speak generation
+std::atomic<uint32_t> randomSpeakSeq{0};
+std::mutex g_AmbientStateMutex;
+
+void ClearBotRandomChatterState(uint64_t botGuid)
+{
+    std::lock_guard<std::mutex> lock(g_AmbientStateMutex);
+    nextRandomChatTime.erase(botGuid);
+    lastAmbientActivityKey.erase(botGuid);
+    pendingTransitionBark.erase(botGuid);
+    ambientBarkEpoch.erase(botGuid);
+    randomSpeakInFlight.erase(botGuid);
+}
+
+// Release this speak's in-flight slot; optionally settle a tracked ambient transition.
+static void EndRandomSpeak(uint64_t botGuid, uint32_t speakGen, bool trackTransition, uint32_t epoch, bool ok)
+{
+    std::lock_guard<std::mutex> lock(g_AmbientStateMutex);
+    auto const flight = randomSpeakInFlight.find(botGuid);
+    if (flight != randomSpeakInFlight.end() && flight->second == speakGen)
+        randomSpeakInFlight.erase(flight);
+    if (!trackTransition)
+        return;
+    auto const it = ambientBarkEpoch.find(botGuid);
+    if (it == ambientBarkEpoch.end() || it->second != epoch)
+        return;
+    pendingTransitionBark.erase(botGuid);
+    if (!ok)
+    {
+        lastAmbientActivityKey.erase(botGuid);
+        nextRandomChatTime[botGuid] = time(nullptr) + urand(g_MinRandomInterval, g_MaxRandomInterval);
+    }
+}
 
 void OllamaBotRandomChatter::OnUpdate(uint32 diff)
 {
@@ -258,14 +297,63 @@ void OllamaBotRandomChatter::HandleRandomChatter()
         processedBotsThisTick.insert(guid);
 
         time_t now = time(nullptr);
-        if (nextRandomChatTime.find(guid) == nextRandomChatTime.end())
+        time_t nextAt = 0;
         {
-            nextRandomChatTime[guid] = now + urand(g_MinRandomInterval, g_MaxRandomInterval);
+            std::lock_guard<std::mutex> lock(g_AmbientStateMutex);
+            if (nextRandomChatTime.find(guid) == nextRandomChatTime.end())
+            {
+                nextRandomChatTime[guid] = now + urand(g_MinRandomInterval, g_MaxRandomInterval);
+                continue;
+            }
+            nextAt = nextRandomChatTime[guid];
+        }
+
+        bool due = now >= nextAt;
+        ActivitySnapshot snap = due ? ReadBotActivity(bot, true) : ReadBotActivity(bot, false);
+
+        bool transitionBark = false;
+        uint32_t barkEpoch = 0;
+        {
+            std::lock_guard<std::mutex> lock(g_AmbientStateMutex);
+            if (snap.ambientWorthy && !snap.key.empty() && lastAmbientActivityKey[guid] != snap.key)
+            {
+                pendingTransitionBark.insert(guid);
+                lastAmbientActivityKey[guid] = snap.key;
+                barkEpoch = ++ambientBarkEpoch[guid];
+                nextRandomChatTime[guid] = now;
+                nextAt = now;
+            }
+
+            transitionBark = pendingTransitionBark.count(guid) != 0;
+            if (transitionBark && barkEpoch == 0)
+                barkEpoch = ambientBarkEpoch[guid];
+            nextAt = nextRandomChatTime[guid];
+        }
+
+        if (now < nextAt)
+            continue;
+
+        // Key-only peek after a pull-forward still needs the display line.
+        if (snap.line.empty())
+            snap = ReadBotActivity(bot, true);
+
+        // Activity ended while a transition was pending: drop only on true idle.
+        // Non-ambient overlays (dead/flee/fight/follow) keep pending so a brief
+        // flee does not cancel the bark; skip VisitObjects until ambient returns.
+        if (transitionBark && !(snap.ambientWorthy && !snap.line.empty()))
+        {
+            if (snap.key.empty())
+            {
+                std::lock_guard<std::mutex> lock(g_AmbientStateMutex);
+                pendingTransitionBark.erase(guid);
+                // Clear last key so the same activity can re-arm after a pause.
+                lastAmbientActivityKey.erase(guid);
+                nextRandomChatTime[guid] = now + urand(g_MinRandomInterval, g_MaxRandomInterval);
+            }
             continue;
         }
-        if (now < nextRandomChatTime[guid])
-            continue;
-        if (urand(0, 99) >= g_RandomChatterBotCommentChance)
+
+        if (!transitionBark && urand(0, 99) >= g_RandomChatterBotCommentChance)
             continue;
         if (g_DisableRepliesInCombat && bot->IsInCombat())
             continue;
@@ -281,7 +369,17 @@ void OllamaBotRandomChatter::HandleRandomChatter()
         std::vector<std::string> tier4;
         std::vector<std::string> guildComments;
         std::string guildPick;
+        RandomIntent intent = RandomIntent::ObserveZone;
+        bool const useActivitySeed = snap.ambientWorthy && !snap.line.empty()
+            && (transitionBark || urand(0, 99) < 50);
 
+        if (useActivitySeed)
+        {
+            environmentInfo = snap.line;
+            intent = RandomIntent::OwnActivity;
+        }
+        else
+        {
         // Creature
         {
                 Unit* unitInRange = nullptr;
@@ -619,13 +717,13 @@ void OllamaBotRandomChatter::HandleRandomChatter()
         }
 
         environmentInfo = PickEnvironmentSeed({&tier1, &tier2, &tier3, &tier4});
-        bool isGuildComment = !guildPick.empty() && environmentInfo == guildPick;
-
-        RandomIntent intent = RandomIntent::ObserveZone;
         if (!environmentInfo.empty())
             intent = static_cast<RandomIntent>(urand(0, 3));
         else if (urand(0, 99) < 25)
             intent = RandomIntent::AskGroup;
+        }
+
+        bool isGuildComment = !useActivitySeed && !guildPick.empty() && environmentInfo == guildPick;
 
         bool hasValidDestination = false;
         if (isGuildComment && bot->GetGuild())
@@ -640,21 +738,50 @@ void OllamaBotRandomChatter::HandleRandomChatter()
         {
             if (g_DebugEnabled)
                 LOG_INFO("server.loading", "[Ollama Chat] Bot {} skipping random chatter (no real player can hear the message)", bot->GetName());
-            nextRandomChatTime[guid] = now + urand(g_MinRandomInterval, g_MaxRandomInterval);
+            // Keep transition pending ready for the next tick; don't push the timer out.
+            if (!transitionBark)
+            {
+                std::lock_guard<std::mutex> lock(g_AmbientStateMutex);
+                nextRandomChatTime[guid] = now + urand(g_MinRandomInterval, g_MaxRandomInterval);
+            }
             continue;
         }
 
         if (g_DebugEnabled)
             LOG_INFO("server.loading", "[Ollama Chat] Random chatter queued for bot {}", bot->GetName());
 
+        // Single-flight: one LLM worker per bot. Keep transition pending if blocked.
+        bool const trackTransition = transitionBark && useActivitySeed;
+        uint32_t speakGen = 0;
+        {
+            std::lock_guard<std::mutex> lock(g_AmbientStateMutex);
+            if (randomSpeakInFlight.count(guid))
+            {
+                if (!transitionBark)
+                    nextRandomChatTime[guid] = now + urand(g_MinRandomInterval, g_MaxRandomInterval);
+                continue;
+            }
+            speakGen = ++randomSpeakSeq;
+            randomSpeakInFlight[guid] = speakGen;
+            if (transitionBark)
+                pendingTransitionBark.erase(guid);
+        }
+
         ++botsQueuedThisTick;
         uint64_t botGuid = bot->GetGUID().GetRawValue();
         std::string envCopy = environmentInfo;
+        uint32_t const epoch = barkEpoch;
 
-        std::thread([botGuid, envCopy, intent, isGuildComment]() {
+        std::thread([botGuid, envCopy, intent, isGuildComment, trackTransition, epoch, speakGen]() {
+                auto fail = [botGuid, speakGen, trackTransition, epoch]() {
+                    EndRandomSpeak(botGuid, speakGen, trackTransition, epoch, false);
+                };
+                auto ok = [botGuid, speakGen, trackTransition, epoch]() {
+                    EndRandomSpeak(botGuid, speakGen, trackTransition, epoch, true);
+                };
                 try {
                     Player* botPtr = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
-                    if (!botPtr) return;
+                    if (!botPtr) { fail(); return; }
 
                     PromptBundle promptBundle = BuildRandomChatterPromptBundle(botPtr, envCopy, intent);
                     if (g_DebugEnabled)
@@ -664,19 +791,23 @@ void OllamaBotRandomChatter::HandleRandomChatter()
 
                     auto responseFuture = SubmitQuery(std::move(promptBundle));
                     if (!responseFuture.valid())
+                    {
+                        fail();
                         return;
+                    }
                     std::string response = responseFuture.get();
                     if (response.empty())
                     {
                         if (g_DebugEnabled)
                             LOG_INFO("server.loading", "[OllamaChat] Bot skipped random chatter due to API error");
+                        fail();
                         return;
                     }
                     
                     botPtr = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
-                    if (!botPtr) return;
+                    if (!botPtr) { fail(); return; }
                     PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(botPtr);
-                    if (!botAI) return;
+                    if (!botAI) { fail(); return; }
                     
                     // Simulate typing delay if enabled
                     if (g_EnableTypingSimulation)
@@ -689,12 +820,13 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                         
                         // Reacquire pointers after delay
                         botPtr = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
-                        if (!botPtr) return;
+                        if (!botPtr) { fail(); return; }
                         botAI = PlayerbotsMgr::instance().GetPlayerbotAI(botPtr);
-                        if (!botAI) return;
+                        if (!botAI) { fail(); return; }
                     }
                     
                     BotAudience sendAudience = RefreshBotAudience(botPtr);
+                    bool sent = false;
 
                     if (isGuildComment && botPtr->GetGuild())
                     {
@@ -702,14 +834,14 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                         {
                             if (g_DebugEnabled)
                                 LOG_INFO("server.loading", "[Ollama Chat] Guild random chatter skipped (guild channels disabled)");
-                            return;
                         }
-                        if (sendAudience.guildHasRealPlayer)
+                        else if (sendAudience.guildHasRealPlayer)
                         {
                             if (g_DebugEnabled)
                                 LOG_INFO("server.loading", "[Ollama Chat] Bot Guild-Based Random Chatter: {}", response);
                             botAI->SayToGuild(response);
                             ProcessBotChatMessage(botPtr, response, SRC_GUILD_LOCAL, nullptr);
+                            sent = true;
                         }
                         else if (g_DebugEnabled)
                         {
@@ -722,18 +854,20 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                         {
                             if (g_DebugEnabled)
                                 LOG_INFO("server.loading", "[Ollama Chat] Party random chatter skipped (party channels disabled)");
-                            return;
                         }
-                        if (!sendAudience.partyHasRealPlayer)
+                        else if (!sendAudience.partyHasRealPlayer)
                         {
                             if (g_DebugEnabled)
                                 LOG_INFO("server.loading", "[Ollama Chat] Bot {} skipping party random chatter (no real player in party)", botPtr->GetName());
-                            return;
                         }
-                        if (g_DebugEnabled)
-                            LOG_INFO("server.loading", "[Ollama Chat] Bot Random Chatter Party: {}", response);
-                        botAI->SayToParty(response);
-                        ProcessBotChatMessage(botPtr, response, SRC_PARTY_LOCAL, nullptr);
+                        else
+                        {
+                            if (g_DebugEnabled)
+                                LOG_INFO("server.loading", "[Ollama Chat] Bot Random Chatter Party: {}", response);
+                            botAI->SayToParty(response);
+                            ProcessBotChatMessage(botPtr, response, SRC_PARTY_LOCAL, nullptr);
+                            sent = true;
+                        }
                     }
                     else
                     {
@@ -746,42 +880,53 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                         {
                             if (g_DebugEnabled)
                                 LOG_INFO("server.loading", "[Ollama Chat] Bot {} skipping random chatter (no audience)", botPtr->GetName());
-                            return;
                         }
-
-                        std::string selectedChannel = PickRandomLine(channels);
-                        
-                        if (selectedChannel == "Say") {
-                            if (g_DebugEnabled)
-                                LOG_INFO("server.loading", "[Ollama Chat] Bot {} Random Chatter Say (real player within {} yards): {}", botPtr->GetName(), g_SayDistance, response);
-                            botAI->Say(response);
-                            ProcessBotChatMessage(botPtr, response, SRC_SAY_LOCAL, nullptr);
-                        } else if (selectedChannel == "General") {
-                            EnsureBotInGeneralChannel(botPtr);
-                            Channel* generalChannel = nullptr;
-                            if (ChannelMgr* cMgr = ChannelMgr::forTeam(botPtr->GetTeamId()))
-                                generalChannel = cMgr->GetChannel("General", botPtr);
-
-                            if (generalChannel)
-                            {
-                                TrySendGeneralChat(botPtr, response, "", generalChannel);
-                                return;
-                            }
-
-                            if (sendAudience.sayInRange)
-                            {
+                        else
+                        {
+                            std::string selectedChannel = PickRandomLine(channels);
+                            
+                            if (selectedChannel == "Say") {
+                                if (g_DebugEnabled)
+                                    LOG_INFO("server.loading", "[Ollama Chat] Bot {} Random Chatter Say (real player within {} yards): {}", botPtr->GetName(), g_SayDistance, response);
                                 botAI->Say(response);
                                 ProcessBotChatMessage(botPtr, response, SRC_SAY_LOCAL, nullptr);
+                                sent = true;
+                            } else if (selectedChannel == "General") {
+                                EnsureBotInGeneralChannel(botPtr);
+                                Channel* generalChannel = nullptr;
+                                if (ChannelMgr* cMgr = ChannelMgr::forTeam(botPtr->GetTeamId()))
+                                    generalChannel = cMgr->GetChannel("General", botPtr);
+
+                                if (generalChannel)
+                                {
+                                    sent = TrySendGeneralChat(botPtr, response, "", generalChannel);
+                                }
+                                else if (sendAudience.sayInRange)
+                                {
+                                    botAI->Say(response);
+                                    ProcessBotChatMessage(botPtr, response, SRC_SAY_LOCAL, nullptr);
+                                    sent = true;
+                                }
                             }
                         }
                     }
+
+                    if (sent)
+                        ok();
+                    else
+                        fail();
                 } catch (const std::exception& e) {
                     LOG_ERROR("server.loading", "[Ollama Chat] Exception in random chatter thread: {}", e.what());
+                    fail();
                 } catch (...) {
                     LOG_ERROR("server.loading", "[Ollama Chat] Unknown exception in random chatter thread");
+                    fail();
                 }
         }).detach();
 
-        nextRandomChatTime[guid] = now + urand(g_MinRandomInterval, g_MaxRandomInterval);
+        {
+            std::lock_guard<std::mutex> lock(g_AmbientStateMutex);
+            nextRandomChatTime[guid] = now + urand(g_MinRandomInterval, g_MaxRandomInterval);
+        }
     }
 }

@@ -68,6 +68,7 @@ public:
         PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT,
         PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT,
         PLAYERHOOK_ON_LOGIN,
+        PLAYERHOOK_ON_LOGOUT,
         PLAYERHOOK_ON_UPDATE_ZONE,
     }) {}
     bool OnPlayerCanUseChat(Player* player, uint32_t type, uint32_t lang, std::string& msg, Player* receiver) override;
@@ -76,6 +77,7 @@ public:
     bool OnPlayerCanUseChat(Player* player, uint32_t type, uint32_t lang, std::string& msg, Guild* guild) override;
     bool OnPlayerCanUseChat(Player* player, uint32_t type, uint32_t lang, std::string& msg, Channel* channel) override;
     void OnPlayerLogin(Player* player) override;
+    void OnPlayerLogout(Player* player) override;
     void OnPlayerUpdateZone(Player* player, uint32 newZone, uint32 newArea) override;
 
     static void ProcessChat(Player* player, uint32_t type, uint32_t lang, std::string& msg, ChatChannelSourceLocal sourceLocal, Channel* channel = nullptr, Player* receiver = nullptr);

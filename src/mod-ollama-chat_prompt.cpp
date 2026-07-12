@@ -11,8 +11,12 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotMgr.h"
+#include "PlayerbotAIConfig.h"
 #include "AiFactory.h"
+#include "AiObjectContext.h"
+#include "TravelMgr.h"
 #include "Guild.h"
+#include "ObjectMgr.h"
 #include "SharedDefines.h"
 #include "Util.h"
 #include <algorithm>
@@ -22,6 +26,7 @@
 #include <sstream>
 #include <filesystem>
 #include <unordered_set>
+#include <variant>
 
 namespace fs = std::filesystem;
 
@@ -403,6 +408,9 @@ std::string const& EventTaskFor(EventKind kind)
 
 std::string RandomIntentTaskLine(RandomIntent intent, ChatChannelSourceLocal channel)
 {
+    if (intent == RandomIntent::OwnActivity)
+        return "One line about your Activity. Do not invent a different task.";
+
     if (channel == SRC_GENERAL_LOCAL)
         return "Say one casual zone-chat line.";
 
@@ -418,6 +426,212 @@ std::string RandomIntentTaskLine(RandomIntent intent, ChatChannelSourceLocal cha
         default:
             return "Make a short observation about this zone or your current activity.";
     }
+}
+
+namespace
+{
+constexpr size_t kActivityLineMax = 120;
+
+// TravelDestination::getTitle() often embeds |c/|H/|h chat links via ChatHelper.
+std::string StripWowChatMarkup(std::string const& in)
+{
+    std::string out;
+    out.reserve(in.size());
+    for (size_t i = 0; i < in.size(); )
+    {
+        if (in[i] == '|' && i + 1 < in.size())
+        {
+            char const c = in[i + 1];
+            if ((c == 'c' || c == 'C') && i + 10 <= in.size())
+            {
+                i += 10;
+                continue;
+            }
+            if (c == 'r' || c == 'R')
+            {
+                i += 2;
+                continue;
+            }
+            if (c == 'H')
+            {
+                size_t const h = in.find("|h", i + 2);
+                if (h == std::string::npos)
+                    break;
+                i = h + 2;
+                if (i < in.size() && in[i] == '[')
+                {
+                    size_t const end = in.find(']', i + 1);
+                    if (end == std::string::npos)
+                        break;
+                    out.append(in, i + 1, end - i - 1);
+                    i = end + 1;
+                    if (i + 1 < in.size() && in[i] == '|' && (in[i + 1] == 'h' || in[i + 1] == 'H'))
+                        i += 2;
+                }
+                continue;
+            }
+            if (c == 'h')
+            {
+                i += 2;
+                continue;
+            }
+        }
+        out.push_back(in[i++]);
+    }
+
+    size_t b = 0;
+    while (b < out.size() && out[b] == ' ')
+        ++b;
+    size_t e = out.size();
+    while (e > b && out[e - 1] == ' ')
+        --e;
+
+    std::string trimmed = (b == 0 && e == out.size()) ? out : out.substr(b, e - b);
+    std::string collapsed;
+    collapsed.reserve(trimmed.size());
+    bool prevSpace = false;
+    for (char ch : trimmed)
+    {
+        if (ch == ' ')
+        {
+            if (!prevSpace)
+                collapsed.push_back(ch);
+            prevSpace = true;
+        }
+        else
+        {
+            collapsed.push_back(ch);
+            prevSpace = false;
+        }
+    }
+    return collapsed;
+}
+
+ActivitySnapshot ClipActivity(ActivitySnapshot snap)
+{
+    if (snap.line.size() > kActivityLineMax)
+        snap.line.resize(kActivityLineMax);
+    return snap;
+}
+} // namespace
+
+ActivitySnapshot ReadBotActivity(Player* bot, bool withDetail)
+{
+    if (!bot)
+        return {};
+
+    PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
+    if (!botAI)
+        return {};
+
+    if (botAI->GetState() == BOT_STATE_DEAD)
+        return {.key = "dead", .line = withDetail ? "dead" : ""};
+
+    if (bot->IsInCombat() && botAI->HasStrategy("flee", BOT_STATE_COMBAT))
+        return {.key = "flee", .line = withDetail ? "fleeing" : ""};
+
+    if (AiObjectContext* aiCtx = botAI->GetAiObjectContext())
+    {
+        if (auto* travelValue = aiCtx->GetValue<TravelTarget*>("travel target"))
+        {
+            if (TravelTarget* travel = travelValue->Get())
+            {
+                TravelStatus const status = travel->getStatus();
+                if (status == TRAVEL_STATUS_TRAVEL || status == TRAVEL_STATUS_WORK)
+                {
+                    // Key must be stable across withDetail true/false (no title in key).
+                    uint32 const entry = travel->getEntry();
+                    std::string key = entry ? "travel:" + std::to_string(entry) : "travel:dest";
+                    if (!withDetail)
+                        return {.key = std::move(key), .ambientWorthy = true};
+
+                    std::string title;
+                    if (TravelDestination* dest = travel->getDestination())
+                        title = StripWowChatMarkup(dest->getTitle());
+                    return ClipActivity({
+                        .key = std::move(key),
+                        .line = title.empty() ? "traveling" : "traveling: " + title,
+                        .ambientWorthy = true
+                    });
+                }
+            }
+        }
+    }
+
+    switch (botAI->rpgInfo.GetStatus())
+    {
+        case RPG_DO_QUEST:
+        {
+            uint32 questId = 0;
+            if (auto const* data = std::get_if<NewRpgInfo::DoQuest>(&botAI->rpgInfo.data))
+                questId = data->questId;
+            std::string key = "quest:" + std::to_string(questId);
+            if (!withDetail)
+                return {.key = std::move(key), .ambientWorthy = true};
+
+            std::string title;
+            if (auto const* data = std::get_if<NewRpgInfo::DoQuest>(&botAI->rpgInfo.data))
+            {
+                if (data->quest)
+                    title = data->quest->GetTitle();
+                else if (Quest const* qt = sObjectMgr->GetQuestTemplate(questId))
+                    title = qt->GetTitle();
+            }
+            return ClipActivity({
+                .key = std::move(key),
+                .line = title.empty() ? "questing" : "quest: " + title,
+                .ambientWorthy = true
+            });
+        }
+        case RPG_GO_GRIND:
+        {
+            if (!withDetail)
+                return {.key = "grind", .ambientWorthy = true};
+            std::string line = "grinding";
+            if (Unit* victim = bot->GetVictim(); victim && !victim->GetName().empty())
+                line += ": " + victim->GetName();
+            else if (AreaTableEntry const* zone = botAI->GetCurrentZone())
+            {
+                std::string const zoneName = botAI->GetLocalizedAreaName(zone);
+                if (!zoneName.empty())
+                    line += " in " + zoneName;
+            }
+            return ClipActivity({.key = "grind", .line = std::move(line), .ambientWorthy = true});
+        }
+        case RPG_TRAVEL_FLIGHT:
+        {
+            if (!withDetail)
+                return {.key = "flight", .ambientWorthy = true};
+            std::string line = "flight";
+            if (auto const* data = std::get_if<NewRpgInfo::TravelFlight>(&botAI->rpgInfo.data))
+            {
+                CreatureTemplate const* ct = sObjectMgr->GetCreatureTemplate(data->flightMasterEntry);
+                if (ct && !ct->Name.empty())
+                    line = data->inFlight ? ("flying from " + ct->Name) : ("flight via " + ct->Name);
+                else if (data->inFlight)
+                    line = "in flight";
+            }
+            return ClipActivity({.key = "flight", .line = std::move(line), .ambientWorthy = true});
+        }
+        default:
+            break;
+    }
+
+    if (botAI->HasStrategy("follow", BOT_STATE_NON_COMBAT))
+        return {.key = "follow", .line = withDetail ? "following" : ""};
+
+    if (Unit* victim = bot->GetVictim())
+    {
+        if (!withDetail)
+            return {.key = "fight"};
+        std::string const name = victim->GetName();
+        return ClipActivity({
+            .key = "fight",
+            .line = name.empty() ? "fighting" : "fighting: " + name
+        });
+    }
+
+    return {};
 }
 
 std::string PromptBundle::CombinedForLegacyGenerate() const
@@ -523,6 +737,7 @@ BotContext OllamaPromptComposer::GatherBotContext(Player* bot, Player* playerOrN
             ctx.playerDistance = bot->GetDistance(playerOrNull);
     }
 
+    ctx.activityLine = ReadBotActivity(bot).line;
     return ctx;
 }
 
@@ -758,6 +973,9 @@ PromptBundle OllamaPromptComposer::Build(PromptScenario scenario, BotContext con
     if (!input.memorySection.empty())
         AppendSection(user, "Memory", input.memorySection);
 
+    if (!ctx.activityLine.empty())
+        AppendSection(user, "Activity", ctx.activityLine);
+
     if (!input.chatHistorySection.empty())
         AppendSection(user, "History", input.chatHistorySection);
 
@@ -908,6 +1126,14 @@ void EnrichPromptBundle(PromptBundle& bundle, Player* bot, BotContext const& ctx
         AppendSection(extra, "Party", ctx.groupCtx.partySection);
     bundle.user = extra.str() + bundle.user;
 
+    // Legacy template path skips Build(); still expose Activity once.
+    if (!ctx.activityLine.empty() && bundle.user.find("## Activity\n") == std::string::npos)
+    {
+        std::ostringstream activityOut;
+        AppendSection(activityOut, "Activity", ctx.activityLine);
+        bundle.user += activityOut.str();
+    }
+
     if (forceSnapshot || (g_EnableChatBotSnapshotTemplate && channel != SRC_GENERAL_LOCAL))
         bundle.user += GenerateBotGameStateSnapshot(bot, ctx.groupCtx.memberCount > 0);
 }
@@ -1047,9 +1273,13 @@ PromptBundle BuildRandomChatterPrompt(Player* bot, std::string const& environmen
     ChatChannelSourceLocal channel)
 {
     BotContext ctx = OllamaPromptComposer::GatherBotContext(bot, nullptr);
+    if (intent == RandomIntent::OwnActivity && !environmentInfo.empty())
+        ctx.activityLine = environmentInfo;
     ctx.personalityLine = GetPersonalityPromptForChannel(ctx.personalityKey, channel);
     ScenarioInput input;
-    input.environmentSection = environmentInfo;
+    // OwnActivity seeds Activity only; do not also mirror it into Environment.
+    if (intent != RandomIntent::OwnActivity)
+        input.environmentSection = environmentInfo;
     input.randomIntent = intent;
     input.chatChannel = channel;
 

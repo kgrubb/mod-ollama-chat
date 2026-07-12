@@ -23,8 +23,19 @@ enum class RandomIntent
     ObserveZone,
     ObserveEnvironment,
     SmallTalk,
-    AskGroup
+    AskGroup,
+    OwnActivity
 };
+
+// Cheap playerbots intent for Enrich + random ambient.
+struct ActivitySnapshot
+{
+    std::string key;
+    std::string line;
+    bool ambientWorthy = false;
+};
+
+ActivitySnapshot ReadBotActivity(Player* bot, bool withDetail = true);
 
 enum class KnowledgeLevel
 {
@@ -70,6 +81,7 @@ struct BotContext
 
     GroupContext groupCtx;
     uint8_t botRaceId = 0;
+    std::string activityLine;
 };
 
 struct ChatIntent
